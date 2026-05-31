@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AVG/探索 综合工作台 V10.0 (Modular Architecture)</title>
+    
+    <script src="./vue.global.prod.js"></script>
+    <script src="./gsap.min.js"></script>
+    
+    <link rel="stylesheet" href="./editor_base.css">
+
+    <style>
+        /* 这里的样式仅负责挂载前的白屏遮罩，确保用户体验 */
+        #app-loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #050508;
+            display: flex; justify-content: center; align-items: center;
+            color: #00f2fe; font-family: monospace; z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="app-loading">Initializing Core Systems...</div>
+    </div>
+
+    <script type="module" src="./editor_main.js"></script>
+</body>
+</html>

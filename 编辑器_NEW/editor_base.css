@@ -1,0 +1,170 @@
+/**
+ * 🌌 全能编辑器 V10.5 基础设计系统 (Global Design Tokens)
+ * 职责：定义全局变量、重置基础样式、提供通用原子类、标准 UI 组件
+ * 说明：本文件为编辑器专用，不随游戏本体打包。
+ */
+
+/* =============================================================================
+   1. 设计令牌 (Design Tokens)
+   ============================================================================= */
+:root {
+    /* 核心色板 (Core Colors) */
+    --bg-color: #050508;            /* 极暗背景 */
+    --panel-bg: #121520;           /* 面板背景 */
+    --panel-bg-light: #1a1e2e;     /* 浅色面板背景 */
+    
+    --primary: #e06c8a;            /* 主色 (粉红) */
+    --primary-glow: rgba(224, 108, 138, 0.3);
+    
+    --secondary: #00f2fe;          /* 次色 (赛博蓝) */
+    --secondary-glow: rgba(0, 242, 254, 0.3);
+    
+    --accent: #ffeb3b;             /* 强调色 (亮黄) */
+    --event-color: #a020f0;        /* 事件色 (紫色) */
+    
+    /* 状态色 (Status Colors) */
+    --success: #00e676;
+    --danger: #ff3b3b;
+    --warning: #ff9800;
+    --text-main: #e0e0e0;
+    --text-muted: #888888;
+    --text-dark: #000000;
+
+    /* 边框与阴影 (Borders & Shadows) */
+    --border: rgba(255, 255, 255, 0.1);
+    --border-active: rgba(0, 242, 254, 0.4);
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.6);
+    
+    /* 布局常量 (Layout) */
+    --top-bar-height: 50px;
+    --sidebar-width: 300px;
+}
+
+/* =============================================================================
+   2. 基础重置 (Base Reset)
+   ============================================================================= */
+* {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    /* 优先使用本地内置的 NotoSansJP 和 MiSans 字体 */
+    font-family: 'MiSans-Regular', 'NotoSansJP-Regular', -apple-system, 'Segoe UI', sans-serif;
+    background: var(--bg-color);
+    color: var(--text-main);
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+}
+
+/* 统一滚动条样式 */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-glow);
+}
+
+/* =============================================================================
+   3. 标准 UI 组件 (Standard UI Components)
+   ============================================================================= */
+
+/* 通用按钮 */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    gap: 6px;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+}
+.btn-primary:hover {
+    background: #f27d9b;
+    box-shadow: 0 0 15px var(--primary-glow);
+}
+
+.btn-secondary {
+    background: transparent;
+    border: 1px solid var(--secondary);
+    color: var(--secondary);
+}
+.btn-secondary:hover {
+    background: rgba(0, 242, 254, 0.1);
+    box-shadow: 0 0 15px var(--secondary-glow);
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+.btn-ghost:hover {
+    color: #fff;
+    border-color: #666;
+}
+
+/* 通用输入框 */
+.input, .select, .textarea {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: #fff;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+    font-family: inherit;
+    transition: border 0.2s;
+}
+
+.input:focus, .select:focus, .textarea:focus {
+    border-color: var(--secondary);
+}
+
+/* =============================================================================
+   4. 辅助工具类 (Utility Classes)
+   ============================================================================= */
+.flex-row { display: flex; flex-direction: row; }
+.flex-column { display: flex; flex-direction: column; }
+.flex-1 { flex: 1; }
+.align-center { align-items: center; }
+.justify-center { justify-content: center; }
+.p-10 { padding: 10px; }
+.m-b-10 { margin-bottom: 10px; }
+
+.text-primary { color: var(--primary); }
+.text-secondary { color: var(--secondary); }
+.text-muted { color: var(--text-muted); }
+
+.hidden { display: none !important; }
+
+/* 磁贴卡片 */
+.card {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}

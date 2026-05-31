@@ -1,0 +1,293 @@
+{
+  "version": "1.0.1",
+  "enums": {
+    "weather": [
+      { "label": "(保持不变)", "value": "" },
+      { "label": "清除天气", "value": "none" },
+      { "label": "下雨", "value": "rain" },
+      { "label": "风暴", "value": "storm" },
+      { "label": "下雪", "value": "snow" }
+    ],
+    "operators": [
+      { "label": "等于 (==)", "value": "===" },
+      { "label": "不等于 (!=)", "value": "!==" },
+      { "label": "大于 (>)", "value": ">" },
+      { "label": "大于等于 (>=)", "value": ">=" },
+      { "label": "小于 (<)", "value": "<" },
+      { "label": "小于等于 (<=)", "value": "<=" }
+    ],
+    "mathOps": [
+      { "label": "设置 (=)", "value": "=" },
+      { "label": "增加 (+)", "value": "+" },
+      { "label": "扣除 (-)", "value": "-" },
+      { "label": "相乘 (*)", "value": "*" },
+      { "label": "相除 (/)", "value": "/" }
+    ],
+    "switchStates": [
+      { "label": "开启 (ON)", "value": "true" },
+      { "label": "关闭 (OFF)", "value": "false" }
+    ]
+  },
+  "conditions": [
+    {
+      "id": "cond_switch",
+      "name": "🎚️ 独立/全局开关判定",
+      "template": "$gameSwitches.value({switchId}) === {state}",
+      "fields": [
+        { "key": "switchId", "label": "开关 ID", "type": "number", "default": 1 },
+        { "key": "state", "label": "比对状态", "type": "select", "source": "switchStates", "default": "true" }
+      ]
+    },
+    {
+      "id": "cond_var",
+      "name": "🔢 游戏变量 / 自定义属性判定",
+      "template": "$gameVariables.value({varId}) {operator} {value}",
+      "fields": [
+        { "key": "varId", "label": "变量 ID (匹配角色库 bindVarId)", "type": "number", "default": 1 },
+        { "key": "operator", "label": "逻辑判定符", "type": "select", "source": "operators", "default": ">=" },
+        { "key": "value", "label": "目标数值", "type": "number", "default": 10 }
+      ]
+    },
+    {
+      "id": "cond_base_param",
+      "name": "🩸 角色基础属性 (HP/MP) 判定",
+      "template": "$gameActors.actor({actorId}).{paramType} {operator} {value}",
+      "fields": [
+        { "key": "actorId", "label": "判定角色", "type": "actorSelect", "default": 1 },
+        { "key": "paramType", "label": "核心属性", "type": "select", "options": [
+          { "label": "当前体力 (hp)", "value": "hp" },
+          { "label": "当前魔力 (mp)", "value": "mp" },
+          { "label": "当前战技 (tp)", "value": "tp" }
+        ], "default": "hp" },
+        { "key": "operator", "label": "逻辑判定符", "type": "select", "source": "operators", "default": ">=" },
+        { "key": "value", "label": "目标数值", "type": "number", "default": 50 }
+      ]
+    },
+    {
+      "id": "cond_item",
+      "name": "🎒 物品持有数量判定",
+      "template": "window.CM_Item.hasItem('{itemId}') {operator} {value}",
+      "fields": [
+        { "key": "itemId", "label": "物品 ID (如 item_001)", "type": "string", "default": "item_001" },
+        { "key": "operator", "label": "逻辑判定符", "type": "select", "source": "operators", "default": ">=" },
+        { "key": "value", "label": "需求数量", "type": "number", "default": 1 }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "act_jump_if",
+      "name": "🔀 条件分歧 (JumpIf)",
+      "template": "<JumpIf: {targetId}, {elseId}, {condition}>",
+      "description": "满足条件时跳转到节点A，否则跳转到节点B",
+      "fields": [
+        { "key": "targetId", "label": "满足条件时 跳转节点 ID", "type": "string", "default": "" },
+        { "key": "elseId", "label": "不满足时 跳转节点 ID (可选)", "type": "string", "default": "" },
+        { "key": "condition", "label": "判定逻辑", "type": "conditionBuilder" }
+      ]
+    },
+    {
+      "id": "act_item_ctrl",
+      "name": "🎒 物品获得/扣除",
+      "template": "<Eval: window.CM_Item.{action}('{itemId}', {value})>",
+      "description": "通过底层 API 直接操作玩家库存，包含背包与仓库。",
+      "fields": [
+        { "key": "action", "label": "操作类型", "type": "select", "options": [
+          { "label": "获得物品", "value": "gainItem" },
+          { "label": "扣除物品", "value": "loseItem" }
+        ], "default": "gainItem" },
+        { "key": "itemId", "label": "物品 ID", "type": "string", "default": "item_001" },
+        { "key": "value", "label": "操作数量", "type": "number", "default": 1 }
+      ]
+    },
+    {
+      "id": "act_param_current",
+      "name": "🩸 状态回复与扣除 (HP/MP/TP)",
+      "template": "<Eval: $gameActors.actor({actorId}).gain{paramType}({value})>",
+      "description": "操作运行时状态（加血、扣蓝等）",
+      "fields": [
+        { "key": "actorId", "label": "目标角色", "type": "actorSelect", "default": 1 },
+        { "key": "paramType", "label": "操作属性", "type": "select", "options": [
+          { "label": "体力 (Hp)", "value": "Hp" },
+          { "label": "魔力 (Mp)", "value": "Mp" },
+          { "label": "战技点 (Tp)", "value": "Tp" }
+        ], "default": "Hp" },
+        { "key": "value", "label": "变化值 (负数为扣除)", "type": "number", "default": -10 }
+      ]
+    },
+    {
+      "id": "act_param_base",
+      "name": "💪 永久成长加成 (最大HP/ATK等)",
+      "template": "<Eval: $gameActors.actor({actorId}).addParam({paramId}, {value})>",
+      "description": "操作底层基础属性上限，永久生效",
+      "fields": [
+        { "key": "actorId", "label": "目标角色", "type": "actorSelect", "default": 1 },
+        { "key": "paramId", "label": "成长维度", "type": "select", "options": [
+          { "label": "最大体力 (MHP)", "value": 0 },
+          { "label": "最大魔力 (MMP)", "value": 1 },
+          { "label": "力量 (ATK)", "value": 2 },
+          { "label": "护甲 (DEF)", "value": 3 },
+          { "label": "灵力 (MAT)", "value": 4 },
+          { "label": "抗性 (MDF)", "value": 5 },
+          { "label": "敏捷 (AGI)", "value": 6 },
+          { "label": "幸运 (LUK)", "value": 7 }
+        ], "default": 0 },
+        { "key": "value", "label": "提升数值 (负数则降低)", "type": "number", "default": 5 }
+      ]
+    },
+    {
+      "id": "act_state_control",
+      "name": "✨ 赋予/移除战斗状态 (Buff/Debuff)",
+      "template": "<Eval: {target}.{action}CmState('{stateId}')>",
+      "description": "为玩家或敌人赋予/移除指定的战斗状态（深度联动 CM_StatusSystem）",
+      "fields": [
+        { "key": "target", "label": "作用目标", "type": "select", "options": [
+          { "label": "👑 玩家自身 (Player)", "value": "$gameParty.leader()" },
+          { "label": "👾 当前敌人 (Enemy)", "value": "$gameTroop.members()[0]?" }
+        ], "default": "$gameParty.leader()" },
+        { "key": "action", "label": "操作类型", "type": "select", "options": [
+          { "label": "➕ 赋予状态 (Add)", "value": "add" },
+          { "label": "➖ 移除状态 (Remove)", "value": "remove" }
+        ], "default": "add" },
+        { "key": "stateId", "label": "状态 ID (例如: state_poison)", "type": "string", "default": "" }
+      ]
+    },
+    {
+      "id": "act_switch",
+      "name": "🎚️ 独立/全局开关操作",
+      "template": "<Switch: {switchId}, {state}>",
+      "fields": [
+        { "key": "switchId", "label": "开关 ID", "type": "number", "default": 1 },
+        { "key": "state", "label": "赋予状态", "type": "select", "source": "switchStates", "default": "true" }
+      ]
+    },
+    {
+      "id": "act_var",
+      "name": "🔢 游戏变量 / 自定义属性操作",
+      "template": "<Var: {varId}, {op}, {value}>",
+      "fields": [
+        { "key": "varId", "label": "变量 ID (匹配角色库 bindVarId)", "type": "number", "default": 1 },
+        { "key": "op", "label": "运算操作", "type": "select", "source": "mathOps", "default": "=" },
+        { "key": "value", "label": "数值", "type": "number", "default": 10 }
+      ]
+    },
+    {
+      "id": "act_trans",
+      "name": "🎬 场所移动与环境过渡",
+      "template": "<Trans> <BG: {bg}> <BGM: {bgm}> <Weather: {weather}, 5, 0, false>",
+      "fields": [
+        { "key": "bg", "label": "新背景图 (如 room01)", "type": "string", "default": "none" },
+        { "key": "bgm", "label": "新 BGM", "type": "string", "default": "" },
+        { "key": "weather", "label": "天气系统", "type": "select", "source": "weather", "default": "" }
+      ]
+    },
+    {
+      "id": "act_pic",
+      "name": "🖼️ 图片展示控制",
+      "template": "<Pic: {id}, {action}, {name}, {x}, {y}, {dur}, {wait}, {scope}>",
+      "fields": [
+        { "key": "id", "label": "图层 (Z-Index)", "type": "number", "default": 1 },
+        { "key": "action", "label": "动作类型", "type": "select", "options": [
+          { "label": "显示", "value": "show" },
+          { "label": "移动", "value": "move" },
+          { "label": "消除", "value": "hide" }
+        ], "default": "show" },
+        { "key": "name", "label": "图片名 (无需后缀)", "type": "string", "default": "" },
+        { "key": "x", "label": "X 坐标", "type": "number", "default": 0 },
+        { "key": "y", "label": "Y 坐标", "type": "number", "default": 0 },
+        { "key": "dur", "label": "渐变帧数 (60帧=1秒)", "type": "number", "default": 60 },
+        { "key": "wait", "label": "是否等待完成", "type": "select", "options": [
+          { "label": "是 (阻塞)", "value": "true" },
+          { "label": "否 (异步)", "value": "false" }
+        ], "default": "true" },
+        { "key": "scope", "label": "作用域 (Scope)", "type": "select", "options": [
+          { "label": "常规 (阅后即焚)", "value": "" },
+          { "label": "持久化 (跨节点存活)", "value": "persistent" }
+        ], "default": "" }
+      ]
+    },
+    {
+      "id": "act_picanim",
+      "name": "💥 图像/屏幕特效",
+      "template": "<PicAnim: {action}, {id}, {power}>",
+      "fields": [
+        { "key": "action", "label": "特效类型", "type": "select", "options": [
+          { "label": "震动屏幕 (Shake)", "value": "shake" }
+        ], "default": "shake" },
+        { "key": "id", "label": "目标图层 (屏幕震动填 0)", "type": "number", "default": 0 },
+        { "key": "power", "label": "特效强度", "type": "select", "options": [
+          { "label": "轻微", "value": "light" },
+          { "label": "沉重", "value": "heavy" },
+          { "label": "狂暴", "value": "violent" }
+        ], "default": "heavy" }
+      ]
+    },
+    {
+      "id": "act_cg",
+      "name": "🌟 破壁者 CG 渲染 (绝对顶层)",
+      "template": "<CG: {id}, {action}, {name}, {x}, {y}, {dur}, {wait}>",
+      "description": "在 Z-Index 99999 系统内通过 ID 进行定位渲染，适用于全屏 CG 或 Cut-in",
+      "fields": [
+        { "key": "id", "label": "CG 实例 ID (Z-Index)", "type": "number", "default": 1 },
+        { "key": "action", "label": "动作类型", "type": "select", "options": [
+          { "label": "淡入显示 (show)", "value": "show" },
+          { "label": "位置移动 (move)", "value": "move" },
+          { "label": "淡出消除 (hide)", "value": "hide" }
+        ], "default": "show" },
+        { "key": "name", "label": "CG 图片名 (无需后缀)", "type": "string", "default": "" },
+        { "key": "x", "label": "X 坐标 (绝对坐标)", "type": "number", "default": 0 },
+        { "key": "y", "label": "Y 坐标 (绝对坐标)", "type": "number", "default": 0 },
+        { "key": "dur", "label": "渐变帧数 (60帧=1秒)", "type": "number", "default": 60 },
+        { "key": "wait", "label": "是否阻塞等待", "type": "select", "options": [
+          { "label": "是", "value": "true" },
+          { "label": "否", "value": "false" }
+        ], "default": "true" }
+      ]
+    },
+    {
+      "id": "act_anim",
+      "name": "✨ 技能/通用动画播放",
+      "template": "<Anim: {id}>",
+      "description": "播放数据库动画。坐标已由编辑器的 animAnchor 自动锚定。",
+      "fields": [
+        { "key": "id", "label": "动画 ID (数据库编号)", "type": "number", "default": 1 }
+      ]
+    },
+    {
+      "id": "act_system",
+      "name": "⏳ 屏幕强制等待/演出",
+      "template": "<{action}: {frames}>",
+      "fields": [
+        { "key": "action", "label": "控制命令", "type": "select", "options": [
+          { "label": "电影宽银幕模式 (Cinema)", "value": "Cinema" },
+          { "label": "强制静默等待 (Wait)", "value": "Wait" }
+        ], "default": "Wait" },
+        { "key": "frames", "label": "持续帧数 (60帧=1秒)", "type": "number", "default": 60 }
+      ]
+    },
+    {
+      "id": "act_actor_control",
+      "name": "🧍 立绘快速控制 (退场/震动)",
+      "template": "<{action}: {target}>",
+      "fields": [
+        { "key": "action", "label": "控制动作", "type": "select", "options": [
+          { "label": "立绘退场 (Leave)", "value": "Leave" },
+          { "label": "立绘受击震动 (Bump)", "value": "Bump" }
+        ], "default": "Leave" },
+        { "key": "target", "label": "目标位置", "type": "select", "options": [
+          { "label": "左侧", "value": "left" },
+          { "label": "右侧", "value": "right" },
+          { "label": "中间", "value": "center" },
+          { "label": "全部", "value": "all" }
+        ], "default": "left" }
+      ]
+    },
+    {
+      "id": "act_close",
+      "name": "🛑 强制结束对话 / 解锁操作",
+      "template": "<Close>",
+      "description": "立即关闭对话框并恢复玩家的自由移动能力",
+      "fields": []
+    }
+  ]
+}
