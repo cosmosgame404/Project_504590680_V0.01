@@ -32,6 +32,8 @@
  * 2. 【ResizeObserver同期】: Graphics クラスのフックに依存せず、ブラウザネイティブの
  * ResizeObserver を用いて Canvas の物理的変形を 100% キャッチし、
  * UIサンドボックスをピクセルパーフェクトで追従させます。
+ * * [变更记录]
+ * - 移除了纸娃娃系统相关的 DOM 点击拦截 (#cm-paperdoll-vue-root 等)
  * ============================================================================
  */
 
@@ -265,7 +267,10 @@
         if (event.target.closest('.cm-custom-scroll')) return;
         _TouchInput_onWheel.call(this, event);
     };
-    const isCmUI = (event) => event.target && event.target.closest && event.target.closest('.cm-ui-layer, #cm-dialogue-vue-root, .dlg-box, .dlg-choice-btn, #cm-title-vue-root, #cm-paperdoll-vue-root, .pd-panel, .pd-overlay, .cm-neo-panel, .cm-base-panel, .cm-glass-panel, .cm-sandbox-root');
+    
+    // 🌟 核心修改：在此处移除了纸娃娃相关DOM的选择器
+    const isCmUI = (event) => event.target && event.target.closest && event.target.closest('.cm-ui-layer, #cm-dialogue-vue-root, .dlg-box, .dlg-choice-btn, #cm-title-vue-root, .cm-neo-panel, .cm-base-panel, .cm-glass-panel, .cm-sandbox-root');
+    
     const _TouchInput_onMouseDown = TouchInput._onMouseDown;
     TouchInput._onMouseDown = function(event) { 
         if (isCmUI(event)) return; 
