@@ -1,35 +1,30 @@
 /*:
  * @target MZ
- * @plugindesc [v11.0] AVG ポイントクリック探索システム (シネマティック・トランジション対応版)
+ * @plugindesc [v12.7] AVG ポイントクリック探索システム (シネマティック対応 + 極簡ノイズレス版)
  * @author Coding Assistant (Architecture Architect)
  * @base CM_CoreEngine
  * @base CM_TimeSurvivalSystem
- * 
- * @param GlobalMaskImage
+ * * @param GlobalMaskImage
  * @text グローバル遮罩(Mask)画像
  * @desc 探索中常に最前面(指定Z-Index)に表示されるオーバーレイ画像。(img/pictures/ 内)
  * @type file
  * @dir img/pictures/
  * @default 
- * 
- * @param GlobalMaskZIndex
+ * * @param GlobalMaskZIndex
  * @text グローバル遮罩 Z-Index
- * @desc 遮罩の深度層 (デフォルト: 30。背景は9、NPCは15、紙人形は40+)
+ * @desc 遮罩の深度層 (デフォルト: 30。背景は9、NPCは15)
  * @type number
  * @min 0
  * @max 9999
  * @default 30
- * 
- * @help
+ * * @help
  * ============================================================================
- * アーキテクチャ更新 (v11.0 シネマティック演出の統合):
- * 1. 【純色カーテン・トランジション】: 場面転換時に右から左へスワイプする
- *    漆黒の帷幕（カーテン）アニメーションを実装。WebGL背景の切り替えを
- *    完全に覆い隠し、シームレスな画面遷移を実現します。
- * 2. 【Stagger(時差)ポップイン】: 背景の遷移完了後、POIノードが 0.08秒の
- *    時差を伴って、GSAPの `back.out` イージングで順番に弾け出ます。
- * 3. 【イベントロック】: トランジション中は操作が完全ロックされ、
- *    アニメーションの競合や誤操作を防止します。
+ * アーキテクチャ更新 (v12.7 極簡ノイズレス UI 準拠):
+ * 1. 【ノイズ除去】: CSS アニメーション(poiPulse)によるネオン境界線を
+ * 完全に削除。UIの視覚的純度を向上させました。
+ * 2. 【ラベルの統一】: すべてのPOIノード（通常/NPC）のネームタグを
+ * エディタのプレビューと完全に一致する「黒背景＋白文字」のソリッドな
+ * デザイン (poi-label-black) に統合しました。
  * ============================================================================
  *
  * @command StartExplore
@@ -65,7 +60,7 @@
     CME.GlobalEvents = []; 
    
     //=============================================================================
-    // 1. 初期化とステートマシンの構築
+    // 1. 初期化とステートマシンの構築 (Initialization & State Machine)
     //=============================================================================
     const _Game_System_initialize = Game_System.prototype.initialize;
     Game_System.prototype.initialize = function() {
@@ -122,7 +117,7 @@
     };
    
     //=============================================================================
-    // 2. アイテムD&D インタラクション API
+    // 2. アイテムD&D インタラクション API (Item D&D Interaction API)
     //=============================================================================
     CME.getPoiAcceptedItems = function(poiId) {
         if (!CME.State.currentScene || !CME.State.currentScene.points) return [];
@@ -162,7 +157,7 @@
     };
    
     //=============================================================================
-    // 3. UI/CSS 管線 (シネマティック・トランジション対応)
+    // 3. UI/CSS 管線 (UI & CSS Pipeline)
     //=============================================================================
     CME.initUI = function() {
         if (document.getElementById('cm-explore-container')) return;
@@ -172,33 +167,28 @@
         #cm-explore-container.active { display: block; }
         #cm-explore-points { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
-        /* 🌟 シネマティック純色カーテン */
         #cm-scene-transition-curtain {
             position: absolute; top: 0; left: 100%; width: 100%; height: 100%;
             background: #0a0a0f; z-index: 9999; pointer-events: none;
             box-shadow: 0 0 80px rgba(0, 0, 0, 0.9);
         }
         
-        .poi-btn { position: absolute; width: 50px; height: 50px; cursor: pointer; pointer-events: auto; display: flex; justify-content: center; align-items: center; transition: box-shadow 0.2s, background 0.2s; will-change: transform, opacity; }
-        .poi-btn::before { content: ""; position: absolute; width: 100%; height: 100%; background: rgba(0, 242, 254, 0.4); border: 2px solid #00f2fe; border-radius: 50%; box-shadow: 0 0 15px rgba(0, 242, 254, 0.8); transition: all 0.3s; z-index: -1; animation: poiPulse 2s infinite; }
-        .poi-btn:hover { z-index: 999 !important; }
-        .poi-btn:hover::before { transform: scale(1.3); background: rgba(224, 108, 138, 0.6); border-color: #e06c8a; box-shadow: 0 0 25px #e06c8a; animation: none; }
-        @keyframes poiPulse { 0% { box-shadow: 0 0 10px rgba(0,242,254,0.5); } 50% { box-shadow: 0 0 25px rgba(0,242,254,1); } 100% { box-shadow: 0 0 10px rgba(0,242,254,0.5); } }
-        .poi-icon { font-size: 26px; text-shadow: 0 2px 5px rgba(0,0,0,0.8); transition: transform 0.2s; }
-        .poi-btn:hover .poi-icon { transform: scale(1.1); }
-        .poi-btn.icon-hidden::before, .poi-btn.icon-hidden .poi-icon { display: none; }
+        /* 🌟 通常ノード (Normal Nodes) - 呼吸発光枠を完全削除 */
+        .poi-btn { position: absolute; width: 150px; height: 150px; cursor: pointer; pointer-events: auto; display: flex; justify-content: center; align-items: center; transition: filter 0.2s; will-change: transform, opacity; }
         
-        .poi-npc { border-radius: 8px !important; border: 2px solid #e06c8a !important; box-shadow: 0 0 15px rgba(224, 108, 138, 0.8) !important; background-color: rgba(0,0,0,0.8); width: 60px; height: 60px;}
-        .poi-npc::before { display: none !important; }
-        .poi-npc:hover { box-shadow: 0 0 25px #e06c8a !important; }
+        .poi-icon { font-size: 78px; text-shadow: 0 4px 10px rgba(0,0,0,0.8); transition: transform 0.2s; filter: drop-shadow(0 0 3px rgba(255,255,255,0.3)); }
+        .poi-btn:hover .poi-icon { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(255,255,255,0.8)); }
+        .poi-btn.icon-hidden .poi-icon { display: none; }
+        
+        /* 🔥 NPC ノード (NPC Nodes) - ソリッドな白枠へ変更 */
+        .poi-npc { border-radius: 50% !important; border: 3px solid #fff !important; box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important; background-color: rgba(0,0,0,0.8); width: 180px; height: 180px; padding: 0;}
+        .poi-npc:hover { box-shadow: 0 0 25px rgba(255,255,255,0.8) !important; transform: translate(-50%, -50%) scale(1.05) !important;}
 
-        .poi-label { position: absolute; top: -35px; background: rgba(0,0,0,0.8); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 14px; white-space: nowrap; pointer-events: none; border: 1px solid rgba(224,108,138,0.5); font-weight: bold; text-shadow: 0 1px 3px #000; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 101; }
-        
-        .poi-tooltip { position: absolute; top: -45px; background: var(--cm-bg-glass, rgba(10,15,25,0.85)); color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: bold; font-family: var(--cm-font-bold, sans-serif); white-space: nowrap; pointer-events: none; border: 1px solid rgba(0, 242, 254, 0.5); opacity: 0; transform: translateY(10px); transition: all 0.2s ease-out; box-shadow: 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 100; letter-spacing: 1px;}
-        .poi-btn:hover .poi-tooltip { opacity: 1; transform: translateY(0); }
+        /* 🌟 共通極簡ラベル (Unified Clean Label - 黒背景白文字) */
+        .poi-label-black { position: absolute; top: -50px; background: rgba(0,0,0,0.8); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 16px; font-weight: bold; white-space: nowrap; pointer-events: none; text-shadow: 0 2px 4px #000; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 101; letter-spacing: 1px; display: flex; align-items: center; }
         
         .tooltip-cost { display: inline-flex; gap: 12px; margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.3); }
-        .cost-item { font-size: 12px; }
+        .cost-item { font-size: 14px; }
         `;
         document.head.appendChild(style);
         
@@ -213,7 +203,7 @@
     };
    
     //=============================================================================
-    // 4. POIライフサイクル
+    // 4. POI ライフサイクル (POI Lifecycle)
     //=============================================================================
     CME.isPoiAvailable = function(p) {
         if (!$gameSystem._cmPoiStates) return true;
@@ -240,7 +230,7 @@
     };
    
     //=============================================================================
-    // 5. 大統一Z-Index: マップレンダリングパッチ
+    // 5. 大統一Z-Index: マップレンダリングパッチ (Unified Z-Index Rendering Patch)
     //=============================================================================
     const _Spriteset_Map_createLowerLayer = Spriteset_Map.prototype.createLowerLayer;
     Spriteset_Map.prototype.createLowerLayer = function() {
@@ -264,7 +254,6 @@
     Spriteset_Map.prototype.update = function() {
         _Spriteset_Map_update.call(this);
         
-        // --- 背景の更新 ---
         if (CME.State.isActive && CME.State.currentScene && this._exploreBgSprite) {
             let targetBg = CME.State.currentScene.bgImage; 
    
@@ -296,7 +285,6 @@
             this._exploreBgSprite._bgName = null;
         }
    
-        // --- グローバル遮罩(Mask)の更新 ---
         if (this._exploreMaskSprite) {
             let maskImg = CME.Param.globalMaskImage;
             
@@ -330,7 +318,7 @@
     };
    
     //=============================================================================
-    // 6. イベントスケジューリング
+    // 6. イベントスケジューリング (Event Scheduling)
     //=============================================================================
     CME.onNewDay = function() {
         if ($gameSystem) $gameSystem._cmEventTriggers = {};
@@ -392,7 +380,7 @@
             $gameSystem._cmEventTriggers[ev.id] = $gameSystem._cmSurvival ? $gameSystem._cmSurvival.day : 1;
         }
    
-        console.log(`[CM_Explore] ⚙️ イベント処理中:`, ev.actionType, ev.arg1);
+        console.log(`[CM_Explore] ⚙️ イベント処理中 (Event Processing):`, ev.actionType, ev.arg1);
         CME.State.isEventRunning = true; 
    
         if (ev.actionType === 'macro') {
@@ -449,7 +437,7 @@
                         CME.State.isEventRunning = false;
                     }
                 } catch(e) { 
-                    console.error("[CM_Explore] ❌ ダイアログ読み込みエラー:", e); 
+                    console.error("[CM_Explore] ❌ ダイアログ読み込みエラー (Dialogue Load Error):", e); 
                     CMD.State.isLoadingAsync = false; 
                     CME.State.isEventRunning = false;
                 }
@@ -461,7 +449,7 @@
             CME.loadAndStart(ev.arg1); 
         } 
         else if (ev.actionType === 'script') { 
-            try { new Function(ev.arg1)(); } catch (e) { console.error("[CM_Explore] ❌ Script Error:", e); } 
+            try { new Function(ev.arg1)(); } catch (e) { console.error("[CM_Explore] ❌ スクリプトエラー (Script Error):", e); } 
             CME.State.isEventRunning = false;
         } 
         else if (ev.actionType === 'switch') {
@@ -474,7 +462,7 @@
     };
    
     //=============================================================================
-    // 7. アクション実行
+    // 7. アクション実行 (Action Execution)
     //=============================================================================
     CME.executeAction = async function(p, el) {
         if (window.CM_TimeSurvival) {
@@ -526,43 +514,72 @@
     };
    
     //=============================================================================
-    // 8. シネマティック・トランジション & レンダリング
+    // 8. シネマティック・トランジション & レンダリング (Cinematic Transition & Rendering)
     //=============================================================================
     PluginManager.registerCommand("CM_ExploreSystem", "StartExplore", function(args) { CME.loadAndStart(args.filepath); });
     PluginManager.registerCommand("CM_ExploreSystem", "EndExplore", args => CME.end());
    
     CME.loadAndStart = async function(filepath) {
         if (!filepath) return;
-        let path = filepath.trim();
+        
+        let path = filepath.trim().replace(/\\/g, '/');
         if (!path.endsWith('.json')) path += '.json';
    
+        const encodedPath = path.split('/').map(segment => encodeURIComponent(segment)).join('/');
+        const url = `data/room/${encodedPath}`;
+        
+        console.log(`[CM_Explore] 🚀 マップデータのルックアップを開始 (Lookup Start): ${url}`);
+   
         try { 
-            const res = await fetch(`data/room/${path}`); 
-            if (res.ok) { 
-                const loadedData = await res.json(); 
-                const newSceneData = Array.isArray(loadedData) ? loadedData[0] : loadedData; 
-   
-                try {
-                    if (window.CM_Dialogue && typeof window.CM_Dialogue.fetchJsonWithFallback === 'function') {
-                        const charData = await window.CM_Dialogue.fetchJsonWithFallback('CharacterData.json');
-                        CME.State.characters = charData || [];
-                    } else {
-                        const cRes = await fetch('data/dialogue/CharacterData.json');
-                        if (cRes.ok) CME.State.characters = await cRes.json();
-                    }
-                } catch(ce) { CME.State.characters = []; }
-   
-                try {
-                    const eRes = await fetch('data/Equipment/EquipmentData.json');
-                    if (eRes.ok) CME.State.equipment = await eRes.json();
-                } catch(ee) { CME.State.equipment = null; }
-   
-                // 🌟 新アーキテクチャ: トランジション演出の実行
-                CME.executeSceneTransition(newSceneData);
-            } else {
-                console.error("[CM_Explore] シーンファイルが見つかりません:", path);
+            const res = await fetch(url); 
+            
+            if (!res.ok && res.status !== 0) {
+                console.error(`[CM_Explore] ❌ 重大な例外 (Fatal): ルックアップ失敗 (HTTP ${res.status}) - ${url}`);
+                return;
             }
-        } catch(e) { console.error("[CM_Explore] 探索データの読み込みエラー:", e); }
+            
+            let loadedData;
+            try {
+                loadedData = await res.json();
+            } catch(jsonErr) {
+                console.error(`[CM_Explore] ❌ 重大な例外 (Fatal): JSONのデシリアライズに失敗しました！ - ${url}`);
+                return;
+            }
+            
+            const newSceneData = Array.isArray(loadedData) ? loadedData[0] : loadedData; 
+            
+            if (!newSceneData.id) newSceneData.id = path.replace('.json', '');
+            if (!newSceneData.points) newSceneData.points = [];
+            if (!newSceneData.timeBgs) newSceneData.timeBgs = [];
+            if (!newSceneData.timeEvents) newSceneData.timeEvents = [];
+   
+            try {
+                let charDataRaw = null;
+                if (window.CM_Dialogue && typeof window.CM_Dialogue.fetchJsonWithFallback === 'function') {
+                    charDataRaw = await window.CM_Dialogue.fetchJsonWithFallback('CharacterData.json');
+                } else {
+                    const cRes = await fetch('data/dialogue/CharacterData.json');
+                    if (cRes.ok || cRes.status === 0) charDataRaw = await cRes.json();
+                }
+                
+                if (charDataRaw) {
+                    CME.State.characters = Array.isArray(charDataRaw) ? charDataRaw : (charDataRaw.actors || []);
+                } else {
+                    CME.State.characters = [];
+                }
+            } catch(ce) { CME.State.characters = []; }
+   
+            try {
+                const eRes = await fetch('data/Equipment/EquipmentData.json');
+                if (eRes.ok || eRes.status === 0) CME.State.equipment = await eRes.json();
+            } catch(ee) { CME.State.equipment = null; }
+   
+            console.log(`[CM_Explore] ✅ マップデータ準備完了、レンダリングパイプラインへ移行 (Ready for Render Pipeline):`, newSceneData.id);
+            CME.executeSceneTransition(newSceneData);
+            
+        } catch(e) { 
+            console.error(`[CM_Explore] ❌ 致命的な例外 (Critical Exception): 基礎ネットワークリクエストのクラッシュ - ${url}`, e);
+        }
     };
     
     CME.executeSceneTransition = function(newSceneData) {
@@ -577,10 +594,8 @@
         container.classList.add('active');
 
         if (window.gsap && curtain) {
-            // 帷幕が右から左へ覆う
             gsap.fromTo(curtain, { left: '100%' }, { left: '0%', duration: 0.45, ease: "power2.inOut", onComplete: () => {
                 
-                // 画面が真っ暗になった瞬間にデータ(背景)をスワップ
                 CME.State.currentScene = newSceneData;
                 CME.State.isActive = true;
                 if (newSceneData.id) CME._sceneCache[newSceneData.id] = newSceneData;
@@ -589,7 +604,6 @@
                     AudioManager.playBgm({ name: newSceneData.bgm.trim(), volume: 100, pitch: 100, pan: 0 });
                 }
                 
-                // POIを非表示状態で事前レンダリング
                 CME.renderPoints(true);
                 CME.checkTimeEvents();
                 
@@ -599,23 +613,23 @@
                     CME.State.pendingCosts = null;
                 }
 
-                // 帷幕が左へ抜け、新背景を露出させる
                 gsap.to(curtain, { left: '-100%', duration: 0.45, ease: "power2.inOut", delay: 0.1, onComplete: () => {
                     const points = document.querySelectorAll('.poi-btn');
                     if (points.length > 0) {
-                        // Stagger ポップイン演出
-                        gsap.to(points, { 
-                            scale: 1, opacity: 1, duration: 0.5, stagger: 0.08, 
-                            ease: "back.out(1.5)", 
-                            onComplete: () => { CME.State.isEventRunning = false; }
-                        });
+                        gsap.fromTo(points, 
+                            { scale: 0, opacity: 0 },
+                            { 
+                                scale: 1, opacity: 1, duration: 0.5, stagger: 0.08, 
+                                ease: "back.out(1.5)", 
+                                onComplete: () => { CME.State.isEventRunning = false; }
+                            }
+                        );
                     } else {
                         CME.State.isEventRunning = false;
                     }
                 }});
             }});
         } else {
-            // GSAP未定義時のフォールバック
             CME.State.currentScene = newSceneData;
             CME.State.isActive = true;
             if (newSceneData.id) CME._sceneCache[newSceneData.id] = newSceneData;
@@ -672,24 +686,22 @@
                 py = Number(((py / 720) * 100).toFixed(2));
             }
             
-            // GSAPによる演出のため初期状態をインラインセット
             btn.style.left = `${px}%`; 
             btn.style.top = `${py}%`; 
             btn.style.zIndex = p.zIndex !== undefined ? p.zIndex : 10;
             btn.style.opacity = isHiddenInitial ? '0' : '1';
-            btn.style.transform = isHiddenInitial ? 'translate(-50%, -50%) scale(0)' : 'translate(-50%, -50%) scale(1)';
+            btn.style.transform = 'translate(-50%, -50%)'; 
             
             let symbol = p.icon === "search" ? "🔍" : (p.icon === "door" ? "🚪" : (p.icon === "talk" ? "💬" : (p.icon === "use" ? "✋" : "")));
             
-            let pName = CME.getLocalizedText(p.name);
+            let pName = CME.getLocalizedText(p.name) || '未命名';
             let costHtml = '';
-            let hasCost = false;
             
             if (p.costTime || p.costEnergy || p.costSatiety) {
                 costHtml += '<div class="tooltip-cost">';
-                if (p.costTime) { costHtml += `<span class="cost-item" style="color:var(--cm-color-warning, #ffeb3b);">${p.costTime} MIN</span>`; hasCost = true; }
-                if (p.costEnergy) { costHtml += `<span class="cost-item" style="color:var(--cm-color-primary, #e06c8a);">${tHP} -${p.costEnergy}</span>`; hasCost = true; }
-                if (p.costSatiety) { costHtml += `<span class="cost-item" style="color:var(--cm-color-secondary, #00f2fe);">${tMP} -${p.costSatiety}</span>`; hasCost = true; }
+                if (p.costTime) { costHtml += `<span class="cost-item" style="color:var(--cm-color-warning, #ffeb3b);">${p.costTime} MIN</span>`; }
+                if (p.costEnergy) { costHtml += `<span class="cost-item" style="color:var(--cm-color-primary, #e06c8a);">${tHP} -${p.costEnergy}</span>`; }
+                if (p.costSatiety) { costHtml += `<span class="cost-item" style="color:var(--cm-color-secondary, #00f2fe);">${tMP} -${p.costSatiety}</span>`; }
                 costHtml += '</div>';
             }
    
@@ -702,23 +714,46 @@
                     const cTitle = CME.getLocalizedText(c.title);
                     const cName = CME.getLocalizedText(c.name);
                     
-                    const titleStr = cTitle ? `<span style="color:var(--cm-color-secondary, #00f2fe);font-size:12px;">[${cTitle}]</span> ` : '';
-                    const charNameHtml = `${titleStr}<b style="color:var(--cm-color-primary, #e06c8a);font-size:15px;">${cName}</b>`;
+                    // 🌟 統一標籤文本顏色（純淨白字）
+                    const titleStr = cTitle ? `<span style="color:#bbb;font-size:14px;margin-right:4px;">[${cTitle}]</span>` : '';
+                    const charNameHtml = `${titleStr}<span>${cName}</span>`;
                     
                     btn.classList.add('poi-npc');
-                    const bgImg = c.defaultPortrait ? `url(img/pictures/${c.defaultPortrait}.png)` : 'none';
-                    let avatarHtml = `<div style="width:100%; height:100%; border-radius:6px; background: ${bgImg} ${bgPos} / ${bgSize}; ${!c.defaultPortrait ? 'display:flex;justify-content:center;align-items:center;font-size:24px;color:#fff;' : ''}">${c.defaultPortrait ? '' : '👤'}</div>`;
-                    let labelHtml = `<div class="poi-label">${charNameHtml}</div>`;
+
+                    let imgName = `npc_${c.id}`;
+                    if (c.portrait && c.portrait.useOverride && c.portrait.overrideName) {
+                        imgName = c.portrait.overrideName;
+                    }
+                    const imgSrc = `img/npc/${imgName}.png`;
+                    
+                    let avatarHtml = "";
+                    if (c.portrait && c.portrait.crop && c.portrait.crop.active) {
+                        const crop = c.portrait.crop;
+                        const targetSize = 180; 
+                        const scaleFactor = targetSize / (crop.r * 2); 
+                        const tx = (targetSize / 2) - (crop.x * scaleFactor); 
+                        const ty = (targetSize / 2) - (crop.y * scaleFactor); 
+                        
+                        avatarHtml = `
+                            <div style="width:100%; height:100%; border-radius:50%; overflow:hidden; position:relative; background-color:rgba(0,0,0,0.5);">
+                                <img src="${imgSrc}" style="position:absolute; left:0; top:0; transform-origin:0 0; transform: translate(${tx}px, ${ty}px) scale(${scaleFactor}); pointer-events:none;">
+                            </div>
+                        `;
+                    } else {
+                        avatarHtml = `<div style="width:100%; height:100%; border-radius:50%; background: url(${imgSrc}) center top / cover no-repeat; background-color:rgba(0,0,0,0.5);"></div>`;
+                    }
+                    
+                    // 🔥 使用全新的統一黑底白字類名 `poi-label-black`
+                    let labelHtml = `<div class="poi-label-black">${charNameHtml}${costHtml}</div>`;
                     
                     btn.innerHTML = avatarHtml + labelHtml;
-                    if (p.showTooltip && (pName || hasCost)) {
-                        btn.innerHTML += `<div class="poi-tooltip">${pName || ''}${costHtml}</div>`;
-                    }
                 }
             }
    
             if (!isNpcMode) {
-                btn.innerHTML = `<div class="poi-icon">${symbol}</div><div class="poi-tooltip">${pName || ''}${costHtml}</div>`;
+                // 🔥 普通節點同樣徹底拋棄 tooltip 邏輯，改用常駐的純淨黑底白字標籤
+                let labelHtml = `<div class="poi-label-black"><span>${pName}</span>${costHtml}</div>`;
+                btn.innerHTML = `<div class="poi-icon">${symbol}</div>${labelHtml}`;
             }
             
             btn.onmousedown = (e) => { 
@@ -766,7 +801,7 @@
    
         if (CME.State.pendingCosts) {
             if (window.CM_TimeSurvival) {
-                console.log(`[CM_Explore] 💰 保留中のリソース消費を決済します。`);
+                console.log(`[CM_Explore] 💰 保留中のリソース消費を決済します (Settling pending resource consumption)。`);
                 window.CM_TimeSurvival.advanceTimeAndStats(
                     CME.State.pendingCosts.ct, 
                     CME.State.pendingCosts.cHP, 
