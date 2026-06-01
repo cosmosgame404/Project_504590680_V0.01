@@ -1,56 +1,48 @@
 /*:
  * @target MZ
- * @plugindesc [v7.2.0] サバイバルコアエンジン (12刻数・MessageLog動的連携版)
+ * @plugindesc [v8.1.0] サバイバルコアエンジン (方案C・アクティブフェーズ管理版)
  * @author Coding Assistant (Architecture Architect)
  * @base CM_CoreEngine
  *
- * @param tickVarId
- * @text 現在刻数変数ID (0-23)
+ * @param currentApVarId
+ * @text 現在AP(行動力)変数ID
  * @type variable
  * @default 13
+ *
+ * @param maxApVarId
+ * @text 最大AP変数ID
+ * @type variable
+ * @default 14
+ *
+ * @param phaseVarId
+ * @text 現在フェーズ変数ID (0:昼, 1:夜)
+ * @type variable
+ * @default 15
  *
  * @param dayVarId
  * @text 経過日数変数ID
  * @type variable
- * @default 14
+ * @default 16
  *
  * @param msgFile
  * @text メッセージ定義ファイル
- * @desc 時間進行時のログを格納するJSONファイル名 (data/dialogue/ 配下)
+ * @desc 警告メッセージ等を格納するJSONファイル名 (data/dialogue/ 配下)
  * @type string
  * @default TimeMessages
  *
- * @param nodeDay
- * @text 昼フェーズノードID
- * @desc 昼に切り替わった際に読み込むノードID
- * @type number
- * @default 1
- *
- * @param nodeNight
- * @text 夜フェーズノードID
- * @desc 夜に切り替わった際に読み込むノードID
- * @type number
- * @default 2
- *
- * @param nodeNewDay
- * @text 新日ノードID
- * @desc 日付が更新された際に読み込むノードID。{day} で日数を動的置換可能。
- * @type number
- * @default 3
- *
  * @help
  * ============================================================================
- * 🌌 12刻数・昼夜切替システム (Tick-Based Day/Night Cycle)
+ * 🌌 厳密AP駆動・アクティブタイムサバイバルシステム (Active Phase System)
  *
- * 【アーキテクチャ仕様】
- * 1. 1フェーズ（昼/夜） = 12刻数。
- * 2. 1日（24刻数） = 昼(0-11) + 夜(12-23)。
- * 3. 時間は自然流失せず、プレイヤーの行動（Explore/Item使用）でのみ進行します。
+ * 【アーキテクチャ仕様 (方案C)】
+ * 1. 自然流失およびAP枯渇による自動的な昼夜切り替えを完全に排除。
+ * 2. プレイヤーのアクティブな介入（HUDの休憩ボタン / マップ上のベッド）でフェーズ進行。
+ * 3. 画面のフェードおよび日月アニメーションとの同期を保つため、
+ * 状態遷移はカスタムイベント（CustomEvent）を介した二段階決済を採用。
  *
- * 【MessageLog 連携 (V7.2)】
- * フェーズ変更時、および日付変更時に CM_Vue_MessageLog の pushNode API を
- * 経由して、非同期でログを画面にレンダリングします。
- * 新日ノードでは {day} 構文を用いることで、現在の日数を埋め込むことが可能です。
+ * 【アニメーションライフサイクル】
+ * Rest/Sleep要請 -> イベント発火(CM_TimeSurvival:RequestAnimation) 
+ * -> UI側でGSAP遮蔽 -> 黒幕裏でコアデータ更新執行 -> UI側で遮蔽解除
  * ============================================================================
  */
 
@@ -64,27 +56,26 @@
     const parameters = PluginManager.parameters(pluginName);
 
     CMT.Params = {
-        tickVarId: Number(parameters['tickVarId'] || 13),
-        dayVarId: Number(parameters['dayVarId'] || 14),
-        msgFile: String(parameters['msgFile'] || 'TimeMessages'),
-        nodeDay: Number(parameters['nodeDay'] || 1),
-        nodeNight: Number(parameters['nodeNight'] || 2),
-        nodeNewDay: Number(parameters['nodeNewDay'] || 3)
+        apVarId: Number(parameters['currentApVarId'] || 13),
+        maxApVarId: Number(parameters['maxApVarId'] || 14),
+        phaseVarId: Number(parameters['phaseVarId'] || 15),
+        dayVarId: Number(parameters['dayVarId'] || 16),
+        msgFile: String(parameters['msgFile'] || 'TimeMessages')
     };
-
-    const TICKS_PER_PHASE = 12;
-    const TICKS_PER_DAY = 24;
 
     CMT.Data = { settings: {}, dict: {} };
 
     //=============================================================================
-    // 1. 初期化 (Initialization)
+    // 1. 初期化とSSOTバインディング (Initialization & SSOT Binding)
     //=============================================================================
     const _Game_System_initialize = Game_System.prototype.initialize;
     Game_System.prototype.initialize = function() {
         _Game_System_initialize.call(this);
+        // SSOT: 唯一の事実の情報源としてゲームセーブデータ内にカプセル化
         this._cmSurvival = {
-            totalTicks: 0,
+            ap: 3,
+            maxAp: 3,
+            phase: 0, // 0:昼(Day), 1:夜(Night)
             day: 1
         };
     };
@@ -93,134 +84,194 @@
     Scene_Boot.prototype.start = async function() { 
         _Scene_Boot_start.call(this); 
         try {
-            const res = await fetch('data/TimeSurvivalData.json');
+            const uri = encodeURIComponent('data/TimeSurvivalData.json');
+            const res = await fetch(`${uri}?t=${Date.now()}`);
             if (res.ok) CMT.Data = await res.json();
         } catch(e) { 
-            // 設定ファイルが存在しない場合はデフォルトで進行
+            console.warn("[CM_TimeSurvival] Config not found, running on fallback sandbox.");
         }
     };
 
+    /**
+     * SSOTデータからRMの変数空間空間へ同期 (Sync to RM Variables)
+     */
     CMT.syncVariables = function() {
         const sys = $gameSystem._cmSurvival;
         if (!sys || !$gameVariables) return;
-        $gameVariables.setValue(CMT.Params.tickVarId, sys.totalTicks % TICKS_PER_DAY);
+        $gameVariables.setValue(CMT.Params.apVarId, sys.ap);
+        $gameVariables.setValue(CMT.Params.maxApVarId, sys.maxAp);
+        $gameVariables.setValue(CMT.Params.phaseVarId, sys.phase);
         $gameVariables.setValue(CMT.Params.dayVarId, sys.day);
     };
 
     //=============================================================================
-    // 2. 刻数演算とフェーズ決済 (Tick Arithmetic & Phase Settlement)
+    // 2. 判定と決済ロジック (Pre-flight Check & Settle)
     //=============================================================================
-    CMT.advanceTimeAndStats = function(ticks, costHP = 0, costMP = 0, costTP = 0) {
+    
+    /**
+     * AP消費が可能か事前判定を行う
+     * @param {number} cost 
+     * @returns {boolean}
+     */
+    CMT.canConsume = function(cost) {
         const sys = $gameSystem._cmSurvival;
-        const actor = $gameActors.actor(1);
-        if (!sys || !actor) return;
+        return sys && sys.ap >= cost;
+    };
 
-        const oldTotalTicks = sys.totalTicks;
-        const oldPhase = Math.floor((oldTotalTicks % TICKS_PER_DAY) / TICKS_PER_PHASE);
-        const oldDay = sys.day;
+    /**
+     * AP消費を純粋に実行する（0になっても自動フェーズ遷移は行わない）
+     * @param {number} cost 
+     */
+    CMT.consume = function(cost) {
+        const sys = $gameSystem._cmSurvival;
+        if (!sys) return;
 
-        if (costHP !== 0) actor.gainHp(-Math.round(costHP));
-        if (costMP !== 0) actor.gainMp(-Math.round(costMP));
-        if (costTP !== 0) actor.gainTp(-Math.round(costTP));
+        sys.ap -= cost;
+        if (sys.ap < 0) sys.ap = 0;
 
-        if (ticks > 0) {
-            sys.totalTicks += Math.round(ticks);
-            
-            const newDay = Math.floor(sys.totalTicks / TICKS_PER_DAY) + 1;
-            const newPhase = Math.floor((sys.totalTicks % TICKS_PER_DAY) / TICKS_PER_PHASE);
-
-            if (newPhase !== oldPhase || newDay !== oldDay) {
-                this.onPhaseChange(newPhase);
-            }
-
-            if (newDay > oldDay) {
-                sys.day = newDay;
-                this.onDayChange(newDay);
-                if (window.CM_Explore && window.CM_Explore.onNewDay) {
-                    window.CM_Explore.onNewDay();
-                }
-            }
-        }
-
-        CMT.checkLimitsAndClamp(actor);
-        CMT.syncVariables();
-
-        if (ticks > 0 && window.CM_Explore && typeof window.CM_Explore.checkTimeEvents === 'function') {
+        this.syncVariables();
+        
+        if (window.CM_Explore && typeof window.CM_Explore.checkTimeEvents === 'function') {
             window.CM_Explore.checkTimeEvents();
         }
     };
 
     /**
-     * 昼夜が切り替わった際のUI連携 (MessageLog経由で通知)
-     * @param {number} phase 0:昼, 1:夜
+     * アイテムや料理によるAPの回復処理
+     * @param {number} amount 
      */
-    CMT.onPhaseChange = function(phase) {
-        if (window.CM_Message && typeof window.CM_Message.pushNode === 'function') {
-            const nodeId = phase === 0 ? CMT.Params.nodeDay : CMT.Params.nodeNight;
-            window.CM_Message.pushNode(CMT.Params.msgFile, nodeId, 'system');
-        }
+    CMT.recover = function(amount) {
+        const sys = $gameSystem._cmSurvival;
+        if (!sys) return;
+
+        sys.ap += amount;
+        if (sys.ap > sys.maxAp) sys.ap = sys.maxAp;
+
+        this.syncVariables();
     };
 
     /**
-     * 日付が変更された際のUI連携 (コンテキストを注入)
-     * @param {number} day 新しい日付
+     * 現在のフェーズ状態を取得 (UIインターフェース用)
+     * @returns {number} 0:昼, 1:夜
      */
-    CMT.onDayChange = function(day) {
-        if (window.CM_Message && typeof window.CM_Message.pushNode === 'function') {
-            window.CM_Message.pushNode(CMT.Params.msgFile, CMT.Params.nodeNewDay, 'system', { day: day });
-        }
-    };
-
-    //=============================================================================
-    // 3. 判定ロジックの拡張 (Logic Extensions)
-    //=============================================================================
-    CMT.isTimeMatch = function(condStr) {
-        if (!condStr || condStr.trim() === "") return true;
+    CMT.getPhase = function() {
         const sys = $gameSystem._cmSurvival;
-        if (!sys) return true;
-        
-        const currentTickInDay = sys.totalTicks % TICKS_PER_DAY;
-        const currentPhase = Math.floor(currentTickInDay / TICKS_PER_PHASE);
-
-        if (condStr.toLowerCase() === "day") return currentPhase === 0;
-        if (condStr.toLowerCase() === "night") return currentPhase === 1;
-
-        let parts = condStr.split('-');
-        if (parts.length === 2) {
-            let start = parseInt(parts[0]), end = parseInt(parts[1]);
-            if (start < end) { 
-                return (currentTickInDay >= start && currentTickInDay < end); 
-            } else { 
-                return (currentTickInDay >= start || currentTickInDay < end); 
-            }
-        }
-        
-        return true;
+        return sys ? sys.phase : 0;
     };
 
     //=============================================================================
-    // 4. プラグインコマンド (Plugin Commands)
+    // 3. アクティブフェーズ遷移トランザクション (Active Phase Transitions)
     //=============================================================================
-    PluginManager.registerCommand(pluginName, "AddTicks", args => {
-        CMT.advanceTimeAndStats(Number(args.ticks), 0, 0, 0);
-    });
-    
-    PluginManager.registerCommand(pluginName, "ChangeSurvivalStats", args => {
-        CMT.advanceTimeAndStats(0, Number(args.hpCost), Number(args.mpCost), Number(args.tpCost));
-    });
+
+    /**
+     * HUDボタンによる「昼から夜への休憩」要請のハンドリング
+     */
+    CMT.restAtDaytime = function() {
+        const sys = $gameSystem._cmSurvival;
+        if (!sys || sys.phase !== 0) return;
+
+        // アニメーション再生をVue/GSAP側に要求 (黒幕フェード開始)
+        this.dispatchTransitionAnimation({
+            type: "rest",
+            targetPhase: 1,
+            onOpaque: () => this.executeDaytimeRest()
+        });
+    };
+
+    /**
+     * 昼間休憩のデータ層確定処理（画面が完全に遮蔽されたタイミングで実行）
+     */
+    CMT.executeDaytimeRest = function() {
+        const sys = $gameSystem._cmSurvival;
+        if (!sys) return;
+
+        sys.phase = 1;
+        sys.ap += 1;
+        if (sys.ap > sys.maxAp) sys.ap = sys.maxAp;
+
+        this.syncVariables();
+        this.onPhaseSettled(1);
+    };
+
+    /**
+     * マップオブジェクト（ベッド）による「夜から翌日への就寝」要請のハンドリング
+     */
+    CMT.sleepInBed = function() {
+        const sys = $gameSystem._cmSurvival;
+        if (!sys) return;
+
+        // 就寝アニメーション再生要求 (黒幕フェード開始)
+        this.dispatchTransitionAnimation({
+            type: "sleep",
+            targetPhase: 0,
+            onOpaque: () => this.executeSleepInBed()
+        });
+    };
+
+    /**
+     * 就寝の数据層確定処理（画面が完全に遮蔽されたタイミングで実行）
+     */
+    CMT.executeSleepInBed = function() {
+        const sys = $gameSystem._cmSurvival;
+        if (!sys) return;
+
+        sys.phase = 0;
+        sys.day += 1;
+        sys.ap = sys.maxAp; // 翌朝は一律で最大値まで全快
+
+        this.syncVariables();
+        this.onPhaseSettled(0);
+        
+        // 翌朝の共通ライフサイクルイベントの発火
+        if (window.CM_Explore && typeof window.CM_Explore.onNewDay === 'function') {
+            window.CM_Explore.onNewDay();
+        }
+    };
 
     //=============================================================================
-    // 5. 既存機能の継承 (State Clamping & Death Hijack)
+    // 4. アニメーションブリッジと通知 (Animation Bridge & Notification)
     //=============================================================================
-    CMT.checkLimitsAndClamp = function(actor) {
-        if (actor.mp < 0) actor.setMp(0);
-        if (actor.hp <= 0) {
-            actor.setHp(0); 
-            return true;
-        }
-        return false;
+
+    /**
+     * Vue UI層へGSAPアニメーションの実行を要求する
+     * @param {Object} detail 
+     */
+    CMT.dispatchTransitionAnimation = function(detail) {
+        // グローバルDOMイベントを介してVue側と疎結合で連携
+        const event = new CustomEvent("CM_TimeSurvival:RequestAnimation", {
+            detail: detail
+        });
+        document.dispatchEvent(event);
     };
-    
-    Game_Party.prototype.isAllDead = function() { return false; };
+
+    /**
+     * 内部データ確定後のライフサイクル通知
+     * @param {number} phase 
+     */
+    CMT.onPhaseSettled = function(phase) {
+        if (window.CM_Explore && typeof window.CM_Explore.checkTimeEvents === 'function') {
+            window.CM_Explore.checkTimeEvents();
+        }
+    };
+
+    //=============================================================================
+    // 5. プラグインコマンド実装 (Plugin Commands)
+    //=============================================================================
+    PluginManager.registerCommand(pluginName, "CheckAp", args => {
+        const result = CMT.canConsume(Number(args.cost));
+        $gameSwitches.setValue(Number(args.resultSwitchId), result);
+    });
+
+    PluginManager.registerCommand(pluginName, "ConsumeAp", args => {
+        CMT.consume(Number(args.cost));
+    });
+
+    PluginManager.registerCommand(pluginName, "TriggerBedSleep", args => {
+        CMT.sleepInBed();
+    });
+
+    PluginManager.registerCommand(pluginName, "RecoverAp", args => {
+        CMT.recover(Number(args.amount));
+    });
 
 })();
