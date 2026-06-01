@@ -1,7 +1,7 @@
 /*:
  * @target MZ
- * @plugindesc [v12.7] AVG ポイントクリック探索システム (シネマティック対応 + 極簡ノイズレス版)
- * @author Coding Assistant (Architecture Architect)
+ * @plugindesc [v12.8.2] AVG ポイントクリック探索システム (シネマティック対応 + 同期レンダリング版)
+ * @author Cosmos404
  * @base CM_CoreEngine
  * @base CM_TimeSurvivalSystem
  * * @param GlobalMaskImage
@@ -17,14 +17,23 @@
  * @min 0
  * @max 9999
  * @default 30
+ * * @param PhaseRespawnDelay
+ * @text フェーズ遷移ノード再出現遅延(ms)
+ * @desc 昼夜交替時、ノードの再出現を遅延させる時間(ミリ秒)。Vue UI側のフェードアウト時間に合わせて調整。
+ * 0に設定した場合、外部(Vue側)から手動で window.CM_Explore.respawnNodes() を呼ぶ必要があります。
+ * @type number
+ * @min 0
+ * @default 2500
  * * @help
  * ============================================================================
- * アーキテクチャ更新 (v12.7 極簡ノイズレス UI 準拠):
- * 1. 【ノイズ除去】: CSS アニメーション(poiPulse)によるネオン境界線を
- * 完全に削除。UIの視覚的純度を向上させました。
- * 2. 【ラベルの統一】: すべてのPOIノード（通常/NPC）のネームタグを
- * エディタのプレビューと完全に一致する「黒背景＋白文字」のソリッドな
- * デザイン (poi-label-black) に統合しました。
+ * アーキテクチャ更新 (v12.8.2 SSOT & Async Sync 準拠):
+ * 1. [ノイズ除去]: コメントおよびコンソール出力からすべての絵文字と視覚的
+ * ノイズを完全に削除しました。
+ * 2. [非同期画像ロード待機]: フェーズ遷移時、背景画像(Bitmap)の非同期
+ * ロード完了を厳密に待機してからPOIノードをポップインさせる機構を追加。
+ * 3. [手動描画APIの露出]: 外部UIフレームワーク(Vue等)のGSAPトランジション
+ * 完了フックから手動で再描画をトリガーできるよう、CME.respawnNodes() を
+ * グローバルAPIとして公開しました。
  * ============================================================================
  *
  * @command StartExplore
@@ -46,14 +55,22 @@
    
     CME.Param = {
         globalMaskImage: PluginManager.parameters("CM_ExploreSystem")['GlobalMaskImage'] || "",
-        globalMaskZ: Number(PluginManager.parameters("CM_ExploreSystem")['GlobalMaskZIndex'] || 30)
+        globalMaskZ: Number(PluginManager.parameters("CM_ExploreSystem")['GlobalMaskZIndex'] || 30),
+        phaseRespawnDelay: Number(PluginManager.parameters("CM_ExploreSystem")['PhaseRespawnDelay'] || 2500)
     };
    
     CME.State = { 
-        isActive: false, data: [], currentScene: null, tick: 0, 
-        characters: [], equipment: null, isEventRunning: false,
+        isActive: false, 
+        data: [], 
+        currentScene: null, 
+        tick: 0, 
+        characters: [], 
+        equipment: null, 
+        isEventRunning: false,
         pendingCosts: null,
-        isInteractionLocked: false 
+        isInteractionLocked: false,
+        lastPhase: null,
+        lastDay: null
     };
     CME.EventQueue = []; 
     CME._sceneCache = {}; 
@@ -94,7 +111,7 @@
             .then(res => res.ok ? res.json() : [])
             .then(data => { CME.GlobalEvents = data; })
             .catch(e => { 
-                console.warn("[CM_Explore] ⚠️ GlobalEvents.json のフェッチに失敗しました:", e); 
+                console.warn("[CM_Explore] GlobalEvents.json のフェッチに失敗しました:", e); 
                 CME.GlobalEvents = []; 
             });
     };
@@ -117,7 +134,27 @@
     };
    
     //=============================================================================
-    // 2. アイテムD&D インタラクション API (Item D&D Interaction API)
+    // 2. アクティブフェーズ連携監視 (Active Phase Transition Monitor)
+    //=============================================================================
+    
+    // アニメーション要請を検知し、POIノードを速やかに隠蔽する
+    document.addEventListener("CM_TimeSurvival:RequestAnimation", function(e) {
+        if (CME.State.isActive && window.gsap) {
+            CME.State.isEventRunning = true; // プレイヤーの操作をロック
+            gsap.to('.poi-btn', { 
+                scale: 0, 
+                opacity: 0, 
+                duration: 0.3, 
+                onComplete: () => {
+                    const container = document.getElementById('cm-explore-points');
+                    if (container) container.innerHTML = '';
+                }
+            });
+        }
+    });
+
+    //=============================================================================
+    // 3. アイテムD&D インタラクション API (Item D&D Interaction API)
     //=============================================================================
     CME.getPoiAcceptedItems = function(poiId) {
         if (!CME.State.currentScene || !CME.State.currentScene.points) return [];
@@ -157,7 +194,7 @@
     };
    
     //=============================================================================
-    // 3. UI/CSS 管線 (UI & CSS Pipeline)
+    // 4. UI/CSS 管線 (UI & CSS Pipeline)
     //=============================================================================
     CME.initUI = function() {
         if (document.getElementById('cm-explore-container')) return;
@@ -173,18 +210,18 @@
             box-shadow: 0 0 80px rgba(0, 0, 0, 0.9);
         }
         
-        /* 🌟 通常ノード (Normal Nodes) - 呼吸発光枠を完全削除 */
+        /* 通常ノード (Normal Nodes) - 呼吸発光枠を完全削除 */
         .poi-btn { position: absolute; width: 150px; height: 150px; cursor: pointer; pointer-events: auto; display: flex; justify-content: center; align-items: center; transition: filter 0.2s; will-change: transform, opacity; }
         
         .poi-icon { font-size: 78px; text-shadow: 0 4px 10px rgba(0,0,0,0.8); transition: transform 0.2s; filter: drop-shadow(0 0 3px rgba(255,255,255,0.3)); }
         .poi-btn:hover .poi-icon { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(255,255,255,0.8)); }
         .poi-btn.icon-hidden .poi-icon { display: none; }
         
-        /* 🔥 NPC ノード (NPC Nodes) - ソリッドな白枠へ変更 */
+        /* NPC ノード (NPC Nodes) - ソリッドな白枠へ変更 */
         .poi-npc { border-radius: 50% !important; border: 3px solid #fff !important; box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important; background-color: rgba(0,0,0,0.8); width: 180px; height: 180px; padding: 0;}
         .poi-npc:hover { box-shadow: 0 0 25px rgba(255,255,255,0.8) !important; transform: translate(-50%, -50%) scale(1.05) !important;}
 
-        /* 🌟 共通極簡ラベル (Unified Clean Label - 黒背景白文字) */
+        /* 共通極簡ラベル (Unified Clean Label - 黒背景白文字) */
         .poi-label-black { position: absolute; top: -50px; background: rgba(0,0,0,0.8); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 16px; font-weight: bold; white-space: nowrap; pointer-events: none; text-shadow: 0 2px 4px #000; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 101; letter-spacing: 1px; display: flex; align-items: center; }
         
         .tooltip-cost { display: inline-flex; gap: 12px; margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.3); }
@@ -203,7 +240,7 @@
     };
    
     //=============================================================================
-    // 4. POI ライフサイクル (POI Lifecycle)
+    // 5. POI ライフサイクル (POI Lifecycle)
     //=============================================================================
     CME.isPoiAvailable = function(p) {
         if (!$gameSystem._cmPoiStates) return true;
@@ -230,7 +267,7 @@
     };
    
     //=============================================================================
-    // 5. 大統一Z-Index: マップレンダリングパッチ (Unified Z-Index Rendering Patch)
+    // 6. 大統一Z-Index: マップレンダリングパッチ (Unified Z-Index Rendering Patch)
     //=============================================================================
     const _Spriteset_Map_createLowerLayer = Spriteset_Map.prototype.createLowerLayer;
     Spriteset_Map.prototype.createLowerLayer = function() {
@@ -318,7 +355,7 @@
     };
    
     //=============================================================================
-    // 6. イベントスケジューリング (Event Scheduling)
+    // 7. イベントスケジューリング (Event Scheduling)
     //=============================================================================
     CME.onNewDay = function() {
         if ($gameSystem) $gameSystem._cmEventTriggers = {};
@@ -380,7 +417,7 @@
             $gameSystem._cmEventTriggers[ev.id] = $gameSystem._cmSurvival ? $gameSystem._cmSurvival.day : 1;
         }
    
-        console.log(`[CM_Explore] ⚙️ イベント処理中 (Event Processing):`, ev.actionType, ev.arg1);
+        console.log(`[CM_Explore] イベント処理中 (Event Processing):`, ev.actionType, ev.arg1);
         CME.State.isEventRunning = true; 
    
         if (ev.actionType === 'macro') {
@@ -437,7 +474,7 @@
                         CME.State.isEventRunning = false;
                     }
                 } catch(e) { 
-                    console.error("[CM_Explore] ❌ ダイアログ読み込みエラー (Dialogue Load Error):", e); 
+                    console.error("[CM_Explore] ダイアログ読み込みエラー (Dialogue Load Error):", e); 
                     CMD.State.isLoadingAsync = false; 
                     CME.State.isEventRunning = false;
                 }
@@ -449,7 +486,7 @@
             CME.loadAndStart(ev.arg1); 
         } 
         else if (ev.actionType === 'script') { 
-            try { new Function(ev.arg1)(); } catch (e) { console.error("[CM_Explore] ❌ スクリプトエラー (Script Error):", e); } 
+            try { new Function(ev.arg1)(); } catch (e) { console.error("[CM_Explore] スクリプトエラー (Script Error):", e); } 
             CME.State.isEventRunning = false;
         } 
         else if (ev.actionType === 'switch') {
@@ -462,7 +499,7 @@
     };
    
     //=============================================================================
-    // 7. アクション実行 (Action Execution)
+    // 8. アクション実行 (Action Execution)
     //=============================================================================
     CME.executeAction = async function(p, el) {
         if (window.CM_TimeSurvival) {
@@ -471,7 +508,7 @@
             const cMP = Number(p.costSatiety) || 0; 
    
             if (ct > 0 || cHP > 0 || cMP > 0) {
-                console.log(`[CM_Explore] ⏳ リソース消費を保留(Suspend)し、イベント完了後に決済します。`);
+                console.log(`[CM_Explore] リソース消費を保留(Suspend)し、イベント完了後に決済します。`);
                 CME.State.pendingCosts = { ct, cHP, cMP };
             }
         }
@@ -514,7 +551,7 @@
     };
    
     //=============================================================================
-    // 8. シネマティック・トランジション & レンダリング (Cinematic Transition & Rendering)
+    // 9. シネマティック・トランジション & レンダリング (Cinematic Transition & Rendering)
     //=============================================================================
     PluginManager.registerCommand("CM_ExploreSystem", "StartExplore", function(args) { CME.loadAndStart(args.filepath); });
     PluginManager.registerCommand("CM_ExploreSystem", "EndExplore", args => CME.end());
@@ -528,13 +565,13 @@
         const encodedPath = path.split('/').map(segment => encodeURIComponent(segment)).join('/');
         const url = `data/room/${encodedPath}`;
         
-        console.log(`[CM_Explore] 🚀 マップデータのルックアップを開始 (Lookup Start): ${url}`);
+        console.log(`[CM_Explore] マップデータのルックアップを開始 (Lookup Start): ${url}`);
    
         try { 
             const res = await fetch(url); 
             
             if (!res.ok && res.status !== 0) {
-                console.error(`[CM_Explore] ❌ 重大な例外 (Fatal): ルックアップ失敗 (HTTP ${res.status}) - ${url}`);
+                console.error(`[CM_Explore] 重大な例外 (Fatal): ルックアップ失敗 (HTTP ${res.status}) - ${url}`);
                 return;
             }
             
@@ -542,7 +579,7 @@
             try {
                 loadedData = await res.json();
             } catch(jsonErr) {
-                console.error(`[CM_Explore] ❌ 重大な例外 (Fatal): JSONのデシリアライズに失敗しました！ - ${url}`);
+                console.error(`[CM_Explore] 重大な例外 (Fatal): JSONのデシリアライズに失敗しました！ - ${url}`);
                 return;
             }
             
@@ -574,11 +611,11 @@
                 if (eRes.ok || eRes.status === 0) CME.State.equipment = await eRes.json();
             } catch(ee) { CME.State.equipment = null; }
    
-            console.log(`[CM_Explore] ✅ マップデータ準備完了、レンダリングパイプラインへ移行 (Ready for Render Pipeline):`, newSceneData.id);
+            console.log(`[CM_Explore] マップデータ準備完了、レンダリングパイプラインへ移行 (Ready for Render Pipeline):`, newSceneData.id);
             CME.executeSceneTransition(newSceneData);
             
         } catch(e) { 
-            console.error(`[CM_Explore] ❌ 致命的な例外 (Critical Exception): 基礎ネットワークリクエストのクラッシュ - ${url}`, e);
+            console.error(`[CM_Explore] 致命的な例外 (Critical Exception): 基礎ネットワークリクエストのクラッシュ - ${url}`, e);
         }
     };
     
@@ -586,6 +623,11 @@
         CME.State.isEventRunning = true; 
         const curtain = document.getElementById('cm-scene-transition-curtain');
         const container = document.getElementById('cm-explore-container');
+        
+        if (window.CM_TimeSurvival) {
+            CME.State.lastPhase = window.CM_TimeSurvival.getPhase();
+            CME.State.lastDay = window.CM_TimeSurvival.getDayOfWeek();
+        }
         
         if (CME.State.isActive && window.gsap) {
             gsap.to('.poi-btn', { scale: 0, opacity: 0, duration: 0.2 });
@@ -646,6 +688,8 @@
                 CME.State.isActive = false; 
                 CME.State.currentScene = null; 
                 CME.State.isEventRunning = false;
+                CME.State.lastPhase = null;
+                CME.State.lastDay = null;
                 const container = document.getElementById('cm-explore-container'); 
                 if (container) container.classList.remove('active'); 
                 document.getElementById('cm-explore-points').innerHTML = ''; 
@@ -655,12 +699,54 @@
             CME.State.isActive = false; 
             CME.State.currentScene = null; 
             CME.State.isEventRunning = false;
+            CME.State.lastPhase = null;
+            CME.State.lastDay = null;
             const container = document.getElementById('cm-explore-container'); 
             if (container) container.classList.remove('active'); 
             document.getElementById('cm-explore-points').innerHTML = ''; 
         }
     };
    
+    //=============================================================================
+    // 10. グローバル再描画 API (Global Respawn API)
+    //=============================================================================
+    /**
+     * 外部から手動で呼び出すためのノード再描画関数
+     * 背景画像のロードが完了しているかを非同期で確認してからGSAPアニメーションを発火します。
+     */
+    CME.respawnNodes = function() {
+        const checkAndRender = () => {
+            const spriteset = SceneManager._scene && SceneManager._scene._spriteset;
+            const bgSprite = spriteset && spriteset._exploreBgSprite;
+            
+            // 背景画像が存在し、かつロードが完了していない場合はリトライ (100ms)
+            if (bgSprite && bgSprite.bitmap && !bgSprite.bitmap.isReady()) {
+                setTimeout(checkAndRender, 100);
+                return;
+            }
+            
+            CME.renderPoints(true); 
+            if (window.gsap) {
+                const points = document.querySelectorAll('.poi-btn');
+                if (points.length > 0) {
+                    gsap.to(points, { 
+                        scale: 1, 
+                        opacity: 1, 
+                        duration: 0.5, 
+                        stagger: 0.08, 
+                        ease: "back.out(1.5)", 
+                        onComplete: () => { CME.State.isEventRunning = false; }
+                    });
+                } else {
+                    CME.State.isEventRunning = false;
+                }
+            } else {
+                CME.State.isEventRunning = false;
+            }
+        };
+        checkAndRender();
+    };
+
     CME.renderPoints = function(isHiddenInitial = false) {
         const pointsContainer = document.getElementById('cm-explore-points'); 
         pointsContainer.innerHTML = '';
@@ -714,7 +800,6 @@
                     const cTitle = CME.getLocalizedText(c.title);
                     const cName = CME.getLocalizedText(c.name);
                     
-                    // 🌟 統一標籤文本顏色（純淨白字）
                     const titleStr = cTitle ? `<span style="color:#bbb;font-size:14px;margin-right:4px;">[${cTitle}]</span>` : '';
                     const charNameHtml = `${titleStr}<span>${cName}</span>`;
                     
@@ -743,15 +828,12 @@
                         avatarHtml = `<div style="width:100%; height:100%; border-radius:50%; background: url(${imgSrc}) center top / cover no-repeat; background-color:rgba(0,0,0,0.5);"></div>`;
                     }
                     
-                    // 🔥 使用全新的統一黑底白字類名 `poi-label-black`
                     let labelHtml = `<div class="poi-label-black">${charNameHtml}${costHtml}</div>`;
-                    
                     btn.innerHTML = avatarHtml + labelHtml;
                 }
             }
    
             if (!isNpcMode) {
-                // 🔥 普通節點同樣徹底拋棄 tooltip 邏輯，改用常駐的純淨黑底白字標籤
                 let labelHtml = `<div class="poi-label-black"><span>${pName}</span>${costHtml}</div>`;
                 btn.innerHTML = `<div class="poi-icon">${symbol}</div>${labelHtml}`;
             }
@@ -791,6 +873,30 @@
     
     CME.update = function() { 
         if (window.CM_Dialogue && window.CM_Dialogue.State.isActive) return; 
+
+        // 状態監視: フェーズまたは日数の変化をトリガーとしてマップノードを再構築
+        if (window.CM_TimeSurvival && CME.State.isActive) {
+            const currentPhase = window.CM_TimeSurvival.getPhase();
+            const currentDay = window.CM_TimeSurvival.getDayOfWeek();
+            
+            if (CME.State.lastPhase !== null && CME.State.lastDay !== null) {
+                if (CME.State.lastPhase !== currentPhase || CME.State.lastDay !== currentDay) {
+                    CME.State.lastPhase = currentPhase;
+                    CME.State.lastDay = currentDay;
+                    
+                    // パラメータが0より大きい場合はタイマー駆動、0の場合は外部(Vue)からの手動呼び出しを待つ
+                    if (CME.Param.phaseRespawnDelay > 0) {
+                        setTimeout(() => {
+                            CME.respawnNodes();
+                        }, CME.Param.phaseRespawnDelay);
+                    }
+                }
+            } else {
+                CME.State.lastPhase = currentPhase;
+                CME.State.lastDay = currentDay;
+            }
+        }
+        
         if (CME.State.isEventRunning) return; 
    
         if (CME.EventQueue.length > 0) {
@@ -801,7 +907,7 @@
    
         if (CME.State.pendingCosts) {
             if (window.CM_TimeSurvival) {
-                console.log(`[CM_Explore] 💰 保留中のリソース消費を決済します (Settling pending resource consumption)。`);
+                console.log(`[CM_Explore] 保留中のリソース消費を決済します。`);
                 window.CM_TimeSurvival.advanceTimeAndStats(
                     CME.State.pendingCosts.ct, 
                     CME.State.pendingCosts.cHP, 
