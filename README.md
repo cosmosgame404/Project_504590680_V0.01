@@ -1,8 +1,8 @@
 # Project_5045906809965615431_V0.01
 项目全局技术白皮书 & AI 协同架构宪法 (Hybrid Architecture & AI-Native Protocol) 
 
-版本: 12.3 (全能编辑器 V12.3 / 唯一事实来源、纯数据沙盒、指针绑定大统一版)
-核心标签: `RPG Maker MZ`, `Vue 3`, `GSAP`, `No-Build ESM`, `Strict Turn-Battler`, `Pure Data Sandbox`, `Reference Binding`, `SSOT`, `Cache Buster`, `Technical Japanese`
+版本: 12.4 (全能编辑器 V12.4 / 男主视角精简重构版、纯数据沙盒、指针绑定大统一版)
+核心标签: `RPG Maker MZ`, `Vue 3`, `GSAP`, `No-Build ESM`, `Strict Turn-Battler`, `Pure Data Sandbox`, `Reference Binding`, `SSOT`, `Cache Buster`, `Technical Japanese`, `Native Render Loop`
 
 ============================================================================= 
 0. AI 助手绝对开发规范与红线 (System Core Directives) 
@@ -38,9 +38,15 @@
 设计令牌与降级渲染 (Design Tokens & Hardware Acceleration):
 大量使用高明度毛玻璃 (Glassmorphism)。但在 Vue 驱动的 GSAP 动画期间，严禁动态补间 `filter: blur`。必须强制开启 `transform: translateZ(0)` 将状态条等元素隔离到独立 GPU 渲染层，仅通过 `x` 和 `opacity` 进行过渡，严防 WebGL 背景重绘导致的帧率雪崩。
 
+原生渲染循环释放 (Native Render Loop Unlock):
+彻底废除基于顶层拦截与强行锁帧的性能监控插件 (CM_PerformanceMonitor)。将渲染节奏与 RequestAnimationFrame 调度完全交还给浏览器与 RMMZ 原生机制，从根本上根除因帧率干预导致的场景加载死锁与异常卡顿。
+
 ============================================================================= 
 3. 物品架构：大统一动作模型与空间物理交互 (Unified Action & Spatial D&D)
 ============================================================================= 
+视角转换与架构减法 (Perspective Shift & Architecture Subtraction):
+游戏确立为男主视角，彻底剔除开销巨大的前端纸娃娃动态图层换装系统 (Paper Doll System)。装备与物品库被极致精简并收敛为「武器、物品、素材」三大核心类别，大幅降低了混合渲染层的 DOM 节点开销与数据冗余。
+
 实例驱动 (Instance-Driven): 废弃 Count 堆叠。每个物品在获取时分配全局唯一的 UUID，承载独立的耐久度。
 
 大统一动作载体 (Grand Unified Action): 武器与道具抽象为同一结构。统一通过 API `executeActionByUid()` 进行原子化结算（校验耐久 -> 扣减属性 -> 调用 `applyItemEffects` -> 结算破损）。
