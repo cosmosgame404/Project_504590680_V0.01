@@ -1,10 +1,10 @@
 /**
  * 🌌 全能编辑器 V12.2 主入口 (Core Orchestrator - Schema Driven)
  * 修改：集成了全新的“状态字典 (Status DB)”模块，用于管理 Buff/Debuff 及动态条件状态。
+ * 清理：移除了纸娃娃/装备系统 (Equip/Doll)，适配男主视角架构。
  */
 
  import { DialogueEditor } from './module_dialogue.js';
- import { EquipEditor } from './module_equip.js'; 
  import { MapEditor } from './module_map.js';
  import { EventsEditor } from './module_events.js'; 
  import { LayoutEditor } from './module_layout.js';
@@ -59,7 +59,6 @@
          dialogueNodes: [],        
          areas: [],                
          characters: [],           
-         dollDb: { settings: {}, slots: [], items: [], expressions: [] }, 
          layoutDb: {},             
          itemDb: {},               
          statusDb: { items: [] }, // 🌟 状态数据库映射
@@ -161,12 +160,6 @@
              } catch(e) { state.db.characters = []; }
  
              try { 
-                 const ed = await dataDir.getDirectoryHandle('Equipment'); 
-                 const f = await ed.getFileHandle('EquipmentData.json'); 
-                 state.db.dollDb = JSON.parse(await (await f.getFile()).text()); 
-             } catch(e) { state.db.dollDb = { settings: {}, slots: [], items: [], expressions: [] }; }
- 
-             try { 
                  const lf = await dataDir.getFileHandle('UILayoutData.json'); 
                  const loadedLayout = JSON.parse(await (await lf.getFile()).text()); 
                  state.db.layoutDb = { ...JSON.parse(JSON.stringify(DEFAULT_LAYOUT_DB)), ...loadedLayout };
@@ -217,10 +210,6 @@
              const cf = await dd.getFileHandle('CharacterData.json', { create: true }); 
              const cw = await cf.createWritable(); await cw.write(JSON.stringify(state.db.characters, null, 2)); await cw.close();
  
-             const ed = await dataDir.getDirectoryHandle('Equipment', { create: true }); 
-             const ef = await ed.getFileHandle('EquipmentData.json', { create: true }); 
-             const ew = await ef.createWritable(); await ew.write(JSON.stringify(state.db.dollDb, null, 2)); await ew.close();
- 
              const layoutF = await dataDir.getFileHandle('UILayoutData.json', { create: true });
              const layoutW = await layoutF.createWritable(); await layoutW.write(JSON.stringify(state.db.layoutDb, null, 2)); await layoutW.close();
 
@@ -259,7 +248,6 @@
  const App = {
      components: {
          'dialogue-editor': DialogueEditor,
-         'equip-editor': EquipEditor,
          'layout-editor': LayoutEditor, 
          'map-editor': MapEditor,
          'events-editor': EventsEditor,
@@ -285,7 +273,6 @@
                      <button class="btn" :class="state.app === 'item' ? 'btn-primary' : 'btn-ghost'" @click="state.app='item'">🎒 物品字典</button>
                      <button class="btn" :class="state.app === 'status' ? 'btn-primary' : 'btn-ghost'" @click="state.app='status'">🧠 状态字典</button>
                      <button class="btn" :class="state.app === 'character' ? 'btn-primary' : 'btn-ghost'" @click="state.app='character'">👥 角色库</button> 
-                     <button class="btn" :class="state.app === 'equip' ? 'btn-primary' : 'btn-ghost'" @click="state.app='equip'">👗 纸娃娃配置</button>
                      <button class="btn" :class="state.app === 'layout' ? 'btn-primary' : 'btn-ghost'" @click="state.app='layout'">🖥️ UI 布局</button>
                      <button class="btn" :class="state.app === 'dialogue' ? 'btn-primary' : 'btn-ghost'" @click="state.app='dialogue'">💬 剧本节点</button>
                  </div>
@@ -317,7 +304,6 @@
                      <section v-show="state.app === 'item'" style="width: 100%; height: 100%;"><item-editor></item-editor></section>
                      <section v-show="state.app === 'status'" style="width: 100%; height: 100%;"><status-editor></status-editor></section>
                      <section v-show="state.app === 'character'" style="width: 100%; height: 100%;"><character-editor></character-editor></section> 
-                     <section v-show="state.app === 'equip'" style="width: 100%; height: 100%;"><equip-editor></equip-editor></section>
                      <section v-show="state.app === 'layout'" style="width: 100%; height: 100%;"><layout-editor></layout-editor></section>
                      <section v-show="state.app === 'dialogue'" style="width: 100%; height: 100%;"><dialogue-editor></dialogue-editor></section>
                      <section v-show="state.app === 'events'" style="width: 100%; height: 100%;"><events-editor></events-editor></section>
