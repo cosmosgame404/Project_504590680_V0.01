@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc [v12.8.2] AVG ポイントクリック探索システム (シネマティック対応 + 同期レンダリング版)
+ * @plugindesc [v12.8.3] AVG ポイントクリック探索システム (シネマティック対応・曜日フィルター同期版)
  * @author Cosmos404
  * @base CM_CoreEngine
  * @base CM_TimeSurvivalSystem
@@ -26,14 +26,13 @@
  * @default 2500
  * * @help
  * ============================================================================
- * アーキテクチャ更新 (v12.8.2 SSOT & Async Sync 準拠):
+ * アーキテクチャ更新 (v12.8.3 SSOT 曜日推論連携準拠):
  * 1. [ノイズ除去]: コメントおよびコンソール出力からすべての絵文字と視覚的
- * ノイズを完全に削除しました。
- * 2. [非同期画像ロード待機]: フェーズ遷移時、背景画像(Bitmap)の非同期
- * ロード完了を厳密に待機してからPOIノードをポップインさせる機構を追加。
- * 3. [手動描画APIの露出]: 外部UIフレームワーク(Vue等)のGSAPトランジション
- * 完了フックから手動で再描画をトリガーできるよう、CME.respawnNodes() を
- * グローバルAPIとして公開しました。
+ * ノイズを完全に削除し、純粋なテクニカルクリーンを維持。
+ * 2. [曜日フィルター判定]: CM_TimeSurvivalSystemのgetDayOfWeek()と連動し、
+ * ノードデータ内の `allowedDays: [1, 5]` 配列による曜日出現制御を実装。
+ * 3. [非同期画像ロード待機]: フェーズ遷移時、背景画像(Bitmap)の非同期
+ * ロード完了を厳密に待機してからPOIノードをポップインさせる機構。
  * ============================================================================
  *
  * @command StartExplore
@@ -140,7 +139,7 @@
     // アニメーション要請を検知し、POIノードを速やかに隠蔽する
     document.addEventListener("CM_TimeSurvival:RequestAnimation", function(e) {
         if (CME.State.isActive && window.gsap) {
-            CME.State.isEventRunning = true; // プレイヤーの操作をロック
+            CME.State.isEventRunning = true; 
             gsap.to('.poi-btn', { 
                 scale: 0, 
                 opacity: 0, 
@@ -240,7 +239,7 @@
     };
    
     //=============================================================================
-    // 5. POI ライフサイクル (POI Lifecycle)
+    // 5. POI ライフサイクル及び表示条件 (POI Lifecycle & Conditions)
     //=============================================================================
     CME.isPoiAvailable = function(p) {
         if (!$gameSystem._cmPoiStates) return true;
@@ -263,6 +262,22 @@
             return sys.totalMinutes >= (state.lastMin + cd); 
         }
         
+        return true;
+    };
+
+    /**
+     * SSOTの日数データに依存してノードの曜日表示条件を判定する
+     * @param {Object} p POIノードオブジェクト
+     * @returns {boolean} 表示可能か否か
+     */
+    CME.isDayMatch = function(p) {
+        if (!p.allowedDays || !Array.isArray(p.allowedDays) || p.allowedDays.length === 0) {
+            return true;
+        }
+        if (window.CM_TimeSurvival && typeof window.CM_TimeSurvival.getDayOfWeek === 'function') {
+            const currentWeekday = window.CM_TimeSurvival.getDayOfWeek();
+            return p.allowedDays.includes(currentWeekday);
+        }
         return true;
     };
    
@@ -710,16 +725,11 @@
     //=============================================================================
     // 10. グローバル再描画 API (Global Respawn API)
     //=============================================================================
-    /**
-     * 外部から手動で呼び出すためのノード再描画関数
-     * 背景画像のロードが完了しているかを非同期で確認してからGSAPアニメーションを発火します。
-     */
     CME.respawnNodes = function() {
         const checkAndRender = () => {
             const spriteset = SceneManager._scene && SceneManager._scene._spriteset;
             const bgSprite = spriteset && spriteset._exploreBgSprite;
             
-            // 背景画像が存在し、かつロードが完了していない場合はリトライ (100ms)
             if (bgSprite && bgSprite.bitmap && !bgSprite.bitmap.isReady()) {
                 setTimeout(checkAndRender, 100);
                 return;
@@ -760,8 +770,10 @@
         const tMP = window.CM_Core && window.CM_Core.I18n ? window.CM_Core.I18n.translate('hud.mp') : "MP";
    
         CME.State.currentScene.points.forEach(p => {
+            // [フィルター判定]: ここで曜日と時間の両方を厳格にチェック
             if (!CME.isPoiAvailable(p)) return;
             if (window.CM_TimeSurvival && !window.CM_TimeSurvival.isTimeMatch(p.timeCond)) return;
+            if (!CME.isDayMatch(p)) return; 
    
             const btn = document.createElement('div'); btn.className = `poi-btn icon-${p.icon}`; btn.id = p.id;
             
@@ -874,7 +886,6 @@
     CME.update = function() { 
         if (window.CM_Dialogue && window.CM_Dialogue.State.isActive) return; 
 
-        // 状態監視: フェーズまたは日数の変化をトリガーとしてマップノードを再構築
         if (window.CM_TimeSurvival && CME.State.isActive) {
             const currentPhase = window.CM_TimeSurvival.getPhase();
             const currentDay = window.CM_TimeSurvival.getDayOfWeek();
@@ -884,7 +895,6 @@
                     CME.State.lastPhase = currentPhase;
                     CME.State.lastDay = currentDay;
                     
-                    // パラメータが0より大きい場合はタイマー駆動、0の場合は外部(Vue)からの手動呼び出しを待つ
                     if (CME.Param.phaseRespawnDelay > 0) {
                         setTimeout(() => {
                             CME.respawnNodes();
@@ -929,9 +939,12 @@
                 CME.State.currentScene.points.forEach(p => { 
                     const el = document.getElementById(p.id); 
                     if (el) {
+                        // [動的更新]: 毎秒ごとに表示可能状態と時間を同期する
                         const isAvailable = CME.isPoiAvailable(p);
                         const isTimeOk = window.CM_TimeSurvival ? window.CM_TimeSurvival.isTimeMatch(p.timeCond) : true;
-                        el.style.display = (CME.evaluateCondition(p.condition) && isTimeOk && isAvailable) ? 'flex' : 'none'; 
+                        const isDayOk = CME.isDayMatch(p);
+                        
+                        el.style.display = (CME.evaluateCondition(p.condition) && isTimeOk && isDayOk && isAvailable) ? 'flex' : 'none'; 
                     }
                 }); 
             } 

@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc [v8.2.0] サバイバルコアエンジン (方案C・アクティブフェーズ管理版・API互換修正)
+ * @plugindesc [v8.3.0] サバイバルコアエンジン (方案C・アクティブフェーズ管理・曜日システム拡張版)
  * @author Cosmos404
  * @base CM_CoreEngine
  *
@@ -34,19 +34,10 @@
  * ============================================================================
  * 厳密AP駆動・アクティブタイムサバイバル系统 (Active Phase System)
  *
- * 【アーキテクチャ仕様 (方案C - v8.2.0 SSOT準拠)】
+ * 【アーキテクチャ仕様 (方案C - v8.3.0 SSOT・曜日推論拡張)】
  * 1. 自然流失およびAP枯渇による自動的な昼夜切り替えを完全に排除。
- * 2. プレイヤーのアクティブな介入（HUDの休憩ボタン / マップ上のベッド）でフェーズ進行。
- * 3. 画面のフェードおよび日月アニメーションとの同期を保つため、
- * 状態遷移はカスタムイベント（CustomEvent）を介した二段階決済を採用。
- *
- * 【アニメーションライフサイクル (探索システム連携)】
- * Rest/Sleep要請 
- *   -> イベント発火(CM_TimeSurvival:RequestAnimation) 
- *   -> 探索システムが検知しノード(POI)を非表示化 (GSAP)
- *   -> UI側でGSAP遮蔽アニメーション進行
- *   -> 黒幕裏で当システムがコアデータ(Phase/Day)を更新執行
- *   -> 探索システムがデータ変更を検知し、最新状態に基づいてノードを再表示
+ * 2. 累計経過日数(sys.day)を唯一の事実の情報源(SSOT)とし、曜日(Weekday)は
+ * 動的な剰余演算によって推論出力を実施。セーブデータの一貫性を保証。
  * ============================================================================
  */
 
@@ -80,7 +71,7 @@
             ap: 3,
             maxAp: 3,
             phase: 0, // 0:昼(Day), 1:夜(Night)
-            day: 1,
+            day: 1,   // 累計経過日数 (1から開始)
             totalMinutes: 0 // クールダウン判定用累積時間 (POIリフレッシュ用)
         };
     };
@@ -209,12 +200,44 @@
     };
 
     /**
-     * 現在の経過日数または曜日インデックスを取得する
+     * 現在の累計経過日数を取得する (UI表示用)
      * @returns {number}
+     */
+    CMT.getTotalDays = function() {
+        const sys = $gameSystem._cmSurvival;
+        return sys ? sys.day : 1;
+    };
+
+    /**
+     * 経過日数から計算された現在の曜日インデックスを取得する
+     * @returns {number} 1:月曜 ~ 7:日曜
      */
     CMT.getDayOfWeek = function() {
         const sys = $gameSystem._cmSurvival;
-        return sys ? sys.day : 1;
+        if (!sys) return 1;
+        // 剰余演算により1-7の循環インデックスを算出
+        return ((sys.day - 1) % 7) + 1;
+    };
+
+    /**
+     * 曜日インデックスからローカライズされた曜日テキストを抽出する
+     * @param {number} weekdayIdx 
+     * @returns {string} 
+     */
+    CMT.getWeekdayText = function(weekdayIdx) {
+        const dict = {
+            1: { ja: "月曜日", zh: "星期一" },
+            2: { ja: "火曜日", zh: "星期二" },
+            3: { ja: "水曜日", zh: "星期三" },
+            4: { ja: "木曜日", zh: "星期四" },
+            5: { ja: "金曜日", zh: "星期五" },
+            6: { ja: "土曜日", zh: "星期六" },
+            7: { ja: "日曜日", zh: "星期日" }
+        };
+        const lang = (window.ConfigManager && window.ConfigManager.currentLang) ? window.ConfigManager.currentLang : 'zh';
+        const target = dict[weekdayIdx];
+        if (!target) return "";
+        return target[lang] || target['zh'];
     };
 
     //=============================================================================
