@@ -1,7 +1,7 @@
 /*:
  * @target MZ
- * @plugindesc [v10.9.8] Vue3 ダイアログHUD (フルカスタム座標＆防振最適化版)
- * @author Coding Assistant (Architecture Architect)
+ * @plugindesc [v10.9.9] Vue3 ダイアログHUD (サバイバルUI統一・ハードエッジスタイル版)
+ * @author Cosmos404
  * @base CM_DialogueSystem_Core
  * @orderAfter CM_DialogueSystem_Core
  *
@@ -11,42 +11,42 @@
  *
  * @param DlgBoxWidth
  * @parent LayoutSettings
- * @text 💬 ダイアログ枠：幅
+ * @text ダイアログ枠：幅
  * @desc 会話枠の幅 (例: 75%, 1050px)
  * @type string
  * @default 75%
  *
  * @param DlgBoxLeft
  * @parent LayoutSettings
- * @text 💬 ダイアログ枠：X座標 (Left)
+ * @text ダイアログ枠：X座標 (Left)
  * @desc 画面左端からの距離。右に動かす場合は calc(50% + 100px) など (デフォルト: 50%)
  * @type string
  * @default 50%
  *
  * @param DlgBoxTranslateX
  * @parent LayoutSettings
- * @text 💬 ダイアログ枠：X軸オフセット
+ * @text ダイアログ枠：X軸オフセット
  * @desc 中心点の補正値 (デフォルト中央揃え: -50%)
  * @type string
  * @default -50%
  *
  * @param DlgBoxBottom
  * @parent LayoutSettings
- * @text 💬 ダイアログ枠：下余白
+ * @text ダイアログ枠：下余白
  * @desc 画面下部からの距離 (例: 30px, 5%)
  * @type string
  * @default 30px
  *
  * @param ChoiceBoxRight
  * @parent LayoutSettings
- * @text 🔘 選択肢枠：右余白
+ * @text 選択肢枠：右余白
  * @desc 画面右端からの距離 (例: 100px, 15%)
  * @type string
  * @default 100px
  *
  * @param ChoiceBoxBottom
  * @parent LayoutSettings
- * @text 🔘 選択肢枠：下余白
+ * @text 選択肢枠：下余白
  * @desc 画面下部からの距離 (例: 260px, 30%)
  * @type string
  * @default 260px
@@ -56,6 +56,10 @@
  * アーキテクチャ設計 (CM_Vue_DialogueHUD):
  * 本プラグインは CM_DialogueSystem_Core から Vue3 に依存する全ての
  * UIレンダリング、CSS、DOMライフサイクル管理を完全に分離したモジュールです。
+ * * アップデート(v10.9.9):
+ * サバイバルシステム(TimeSurvival)のUI言語体系と完全に統合。
+ * 丸みやブラー効果を撤廃し、#1a1a1aをベースとした高コントラスト、太字、
+ * ハードシャドウのフラットデザインに変更。
  * ============================================================================
  */
 
@@ -96,24 +100,48 @@
             
             .dlg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 1; pointer-events: auto; }
             
+            /* メニューボタン群 (サバイバルUI準拠) */
             .cm-top-right-menu {
-                position: absolute; top: 30px; right: 30px; z-index: 10000;
-                display: flex; gap: 15px; pointer-events: auto; transition: opacity 0.3s;
+                position: absolute; top: 34px; right: 34px; z-index: 10000;
+                display: flex; gap: 17px; pointer-events: auto; transition: opacity 0.3s;
             }
             .cm-top-right-menu.is-hidden { opacity: 0; pointer-events: none; }
-            .sys-btn {
-                background: var(--cm-bg-glass, rgba(255, 255, 255, 0.9)); border: none;
-                box-shadow: var(--cm-shadow-diffuse, 0 4px 16px rgba(0,0,0,0.08));
-                color: var(--cm-color-text-main, #333); padding: 8px 18px; border-radius: 20px;
-                font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;
-                backdrop-filter: blur(10px); transition: all 0.2s ease;
-            }
-            .sys-btn:hover { background: var(--cm-color-primary, #ff4b8b); color: #fff; transform: translateY(-2px); }
-            .sys-btn.active { background: var(--cm-color-secondary, #00d2ff); color: #fff; }
             
-            /* メインダイアログコンテナ 
-               ※Vue側から left, bottom, transform がインラインで注入されるため、ここでは省略
-            */
+            .sys-btn {
+                background-color: #1a1a1a; 
+                color: #ffffff; 
+                border: 3px solid #ffffff;
+                box-shadow: 4px 4px 0px #1a1a1a; 
+                border-radius: 0;
+                padding: 8px 24px; 
+                font-size: 25px; 
+                font-weight: 800; 
+                letter-spacing: 1px;
+                cursor: pointer; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center;
+                transition: transform 0.1s ease, background-color 0.1s ease, color 0.1s ease, box-shadow 0.1s ease;
+                font-family: var(--cm-font-main, sans-serif); 
+                outline: none;
+            }
+            .sys-btn:hover { 
+                background-color: #ffffff; 
+                color: #1a1a1a; 
+                transform: translate(-2px, -2px); 
+                box-shadow: 6px 6px 0px var(--cm-color-primary, #ff4b8b); 
+            }
+            .sys-btn:active { 
+                transform: translate(3px, 3px); 
+                box-shadow: 1px 1px 0px var(--cm-color-primary, #ff4b8b); 
+            }
+            .sys-btn.active { 
+                background-color: var(--cm-color-primary, #ff4b8b); 
+                border-color: var(--cm-color-primary, #ff4b8b); 
+                color: #ffffff; 
+            }
+            
+            /* メインダイアログコンテナ */
             .dlg-box { 
                 position: absolute; 
                 max-width: 1050px; padding: 20px; box-sizing: border-box; 
@@ -122,7 +150,6 @@
                 display: flex; flex-direction: column; align-items: center;
                 will-change: transform, opacity; backface-visibility: hidden;
             }
-            /* 非表示時の Y軸オフセットも Vue 側で計算して適用する */
             .dlg-box.is-empty-box { background: transparent !important; box-shadow: none !important; border: none !important; backdrop-filter: none !important; }
             .is-empty-box .dlg-speaker, .is-empty-box .dlg-next-icon, .is-empty-box .dlg-text-container { display: none !important; }
             .dlg-box.is-cinematic { padding: 0; }
@@ -144,29 +171,44 @@
             /* テキストエリア */
             .dlg-text-container { width: 100%; height: auto; min-height: 80px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; text-align: center; overflow: hidden; }
             .dlg-text { 
-                color: #ffffff; font-size: 24px; line-height: 1.6; text-shadow: 0 2px 6px rgba(0,0,0,0.8); font-weight: bold; font-family: var(--cm-font-main); width: 100%; letter-spacing: 1px; 
+                color: #ffffff; line-height: 1.6; text-shadow: 0 2px 6px rgba(0,0,0,0.8); font-weight: bold; font-family: var(--cm-font-main); width: 100%; letter-spacing: 1px; 
                 transform: translateZ(0); backface-visibility: hidden; -webkit-font-smoothing: antialiased;
             }
 
             .dlg-next-icon { position: absolute; bottom: 15px; right: 20px; color: #ffffff; font-size: 22px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
             .is-cinematic .dlg-next-icon { display: none !important; }
             
-            /* 選択肢コンテナ */
+            /* 選択肢コンテナ (サバイバルUI準拠) */
             .dlg-choices-container { 
                 position: absolute; width: auto; max-width: 60%; z-index: 20; pointer-events: none; 
-                display: flex; flex-direction: column; align-items: flex-end; gap: 12px; 
+                display: flex; flex-direction: column; align-items: flex-end; gap: 17px; 
             }
 
-            /* 選択肢ボタン */
+            /* 選択肢ボタン (サバイバルUI準拠の大枠・強コントラスト) */
             .dlg-choice-btn { 
-                position: relative; padding: 12px 28px; cursor: pointer; pointer-events: auto; 
-                min-width: 250px; text-align: left; 
-                background: #ffffff; border: 2px solid var(--cm-color-primary, #ff4b8b); color: var(--cm-color-text-main, #333333);
-                border-radius: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-                will-change: transform;
+                position: relative; padding: 16px 36px; cursor: pointer; pointer-events: auto; 
+                min-width: 320px; text-align: left; 
+                background-color: #1a1a1a; 
+                color: #ffffff; 
+                border: 4px solid #ffffff;
+                border-radius: 0; 
+                box-shadow: 6px 6px 0px #1a1a1a; 
+                transition: all 0.1s ease;
+                will-change: transform; 
+                font-family: var(--cm-font-main, sans-serif);
             }
-            .dlg-choice-btn:hover { background: var(--cm-color-primary, #ff4b8b); color: #ffffff; box-shadow: 0 8px 16px rgba(255, 75, 139, 0.3); transform: scale(1.05) translateX(-5px); }
-            .dlg-choice-btn > div { font-weight: bold; font-size: 18px; text-shadow: none; }
+            .dlg-choice-btn:hover { 
+                background-color: var(--cm-color-primary, #ff4b8b); 
+                border-color: var(--cm-color-primary, #ff4b8b); 
+                color: #ffffff; 
+                box-shadow: 8px 8px 0px #1a1a1a; 
+                transform: translate(-4px, -4px); 
+            }
+            .dlg-choice-btn:active {
+                transform: translate(3px, 3px); 
+                box-shadow: 1px 1px 0px #1a1a1a;
+            }
+            .dlg-choice-btn > div { font-weight: 800; font-size: 28px; letter-spacing: 1px; text-shadow: none; }
             
             /* ログ・フェード層 */
             #cm-log-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); z-index: 9500; display: flex; justify-content: center; align-items: center; pointer-events: auto; }
@@ -258,22 +300,22 @@
                     
                     <div class="cm-top-right-menu" :class="{ 'is-hidden': ui.isTextEmpty || ui.isHidden || !ui.isActive }">
                         <div class="sys-btn" :class="{ active: ui.isAutoMode }" @click.stop="toggleAuto">
-                            <span v-show="ui.isAutoMode">▶</span> Auto
+                            <span>AUTO</span>
                         </div>
-                        <div class="sys-btn" @click.stop="toggleLog">Log</div>
-                        <div class="sys-btn" @click.stop="toggleHide">Hide</div>
+                        <div class="sys-btn" @click.stop="toggleLog">LOG</div>
+                        <div class="sys-btn" @click.stop="toggleHide">HIDE</div>
                     </div>
 
                     <div id="cm-dialogue-wrapper">
                         
                         <!-- 選択肢ボックス -->
                         <div class="dlg-choices-container" v-show="ui.isActive && ui.choices.length > 0" :style="getChoiceBoxStyle">
-                            <transition-group tag="div" @before-enter="onChoiceBeforeEnter" @enter="onChoiceEnter" style="display:flex;flex-direction:column;gap:12px;width:100%;align-items:flex-end;">
+                            <transition-group tag="div" @before-enter="onChoiceBeforeEnter" @enter="onChoiceEnter" style="display:flex;flex-direction:column;gap:17px;width:100%;align-items:flex-end;">
                                 <div class="dlg-choice-btn" v-for="(c, index) in ui.choices" :key="c.html + '-' + index" :data-index="index" @click.stop="selectChoice(c, $event)"><div v-html="c.html"></div></div>
                             </transition-group>
                         </div>
 
-                        <!-- 🌟 テキストダイアログボックス -->
+                        <!-- テキストダイアログボックス -->
                         <div class="dlg-box" 
                              :class="{ 'is-hidden': ui.isHidden, 'is-cinematic': ui.isActive && ui.isCinematic, 'is-empty-box': ui.isActive && ui.isTextEmpty }" 
                              :style="getDlgBoxStyle">
@@ -282,7 +324,9 @@
                                 <span class="speaker-name">{{ ui.speakerName }}</span>
                             </div>
                             
-                            <div class="dlg-text-container"><div id="cm-pure-text-container" class="dlg-text"></div></div>
+                            <div class="dlg-text-container">
+                                <div id="cm-pure-text-container" class="dlg-text" :style="getTextStyle"></div>
+                            </div>
                             <div class="dlg-next-icon" v-show="!ui.isTyping && ui.choices.length === 0 && !ui.isCinematic && !ui.isAutoMode">▼</div>
                         </div>
                         
@@ -299,7 +343,7 @@
                             <div id="cm-log-content" class="log-content" @wheel.stop @touchmove.stop @touchstart.stop>
                                 <div class="log-item" v-for="(item, idx) in ui.logList" :key="idx">
                                     <div class="log-item-name" :class="item.isProtagonist ? 'name-protag' : 'name-npc'" v-if="item.speakerName">{{ item.speakerName }}</div>
-                                    <div class="log-item-text" v-html="item.textHtml"></div>
+                                    <div class="log-item-text" v-html="item.textHtml" :style="getLogTextStyle"></div>
                                 </div>
                             </div>
                         </div>
@@ -325,7 +369,22 @@
                     CM.advanceDialogue(); 
                 };
 
-                // 🌟 プラグインパラメータのバインディング
+                const getTextStyle = computed(() => {
+                    const sizeMap = { 1: 22, 2: 26, 3: 32 };
+                    const sizeLevel = (typeof ConfigManager !== 'undefined' && ConfigManager.dialogueTextSize) ? ConfigManager.dialogueTextSize : 2;
+                    return {
+                        fontSize: (sizeMap[sizeLevel] || 26) + 'px'
+                    };
+                });
+
+                const getLogTextStyle = computed(() => {
+                    const sizeMap = { 1: 18, 2: 22, 3: 26 };
+                    const sizeLevel = (typeof ConfigManager !== 'undefined' && ConfigManager.dialogueTextSize) ? ConfigManager.dialogueTextSize : 2;
+                    return {
+                        fontSize: (sizeMap[sizeLevel] || 22) + 'px'
+                    };
+                });
+
                 const getDlgBoxStyle = computed(() => {
                     let yOffset = ui.isHidden ? '20px' : '0px';
                     let b = CM.Param.DlgBoxBottom;
@@ -340,7 +399,6 @@
                         width: w,
                         left: CM.Param.DlgBoxLeft,
                         bottom: b,
-                        // hidden 状態の Y 軸オフセットアニメーションもここで制御
                         transform: `translate(${CM.Param.DlgBoxTranslateX}, ${yOffset}) translateZ(0)`,
                         opacity: ui.isHidden ? 0 : 1
                     };
@@ -385,7 +443,6 @@
                 const onLogEnter = (el, done) => { gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.3, onComplete: done }); const p = el.querySelector('.log-panel'); if (p) gsap.fromTo(p, { y: 30, scale: 0.98 }, { y: 0, scale: 1, duration: 0.3, ease: "power2.out" }); };
                 const onLogLeave = (el, done) => { gsap.to(el, { opacity: 0, duration: 0.2, onComplete: done }); const p = el.querySelector('.log-panel'); if (p) gsap.to(p, { y: 20, scale: 0.98, duration: 0.2, ease: "power2.in" }); };
 
-                // キャンバストラッカー
                 const syncCanvasPhysicalLayout = () => {
                     const canvas = document.getElementById('gameCanvas') || document.querySelector('canvas');
                     const tracker = document.getElementById('cm-canvas-tracker');
@@ -431,7 +488,7 @@
                 return { 
                     ui, advance, toggleLog, toggleHide, toggleAuto, selectChoice, 
                     onChoiceBeforeEnter, onChoiceEnter, onLogEnter, onLogLeave,
-                    getDlgBoxStyle, getChoiceBoxStyle
+                    getDlgBoxStyle, getChoiceBoxStyle, getTextStyle, getLogTextStyle
                 };
             }
         }).mount(root);

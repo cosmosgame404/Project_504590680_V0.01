@@ -1,13 +1,13 @@
 /*:
  * @target MZ
- * @plugindesc [v8.5.5] サイバーポップ・タイトル＆UI (3言語対応最適化版)
- * @author Coding Assistant (Architecture Architect)
+ * @plugindesc [v8.6.1] サイバーポップ・タイトル＆UI (テキストサイズ設定機能追加版)
+ * @author Cosmos404
  * @base CM_CoreEngine
  * @orderAfter CM_CoreEngine
  *
  * @param studioName
  * @text スタジオ名
- * @default PROJECT KAWAII
+ * @default PROJECT Cosmos404
  *
  * @param studioText
  * @text スタジオサブテキスト
@@ -15,11 +15,11 @@
  *
  * @param gameTitle
  * @text ゲームタイトル
- * @default 赛博魅惑
+ * @default Mushoku Tensei
  *
  * @param gameSubTitle
  * @text ゲームサブタイトル
- * @default CYBER Seduction
+ * @default The tipping point of desire
  *
  * @param titleBgImage
  * @text 背景画像
@@ -29,10 +29,13 @@
  *
  * @help
  * ============================================================================
- * アーキテクチャ更新 (v8.5.5):
- * 1. 言語サポートの最適化: 繁体字および韓国語のフォールバックを削除。
- * 日・英・簡体字の3言語のみのサポートへ完全移行。
- * 2. セーブデータカード縮小および24時間表示機能はv8.5.4を継承。
+ * アーキテクチャ更新 (v8.6.1):
+ * 1. 常にダッシュ(alwaysDash)オプションを完全に撤廃。
+ * 2. ダイアログテキストサイズ(dialogueTextSize)の3段階トグル機能を追加。
+ * - 1: 小 (22px)
+ * - 2: 中 (26px) - デフォルト
+ * - 3: 大 (32px)
+ * 3. 状態管理の独立: ConfigManagerのフックを通じてサイズ設定を永続化。
  * ============================================================================
  */
 
@@ -44,6 +47,76 @@
     const Core = window.CM_Core;
     
     CM_Anime.hasSplashed = false;
+    CM_Anime.savedLanguage = 'ja'; 
+
+    //=============================================================================
+    // 0. ローカル辞書定義
+    //=============================================================================
+    const CM_LocalDict = {
+        ja: {
+            title: {
+                langName: '日本語',
+                options: '設定',
+                newGame: '初めから',
+                continue: '続きから',
+                exit: '終了',
+                audioSettings: 'オーディオ設定',
+                bgmVol: 'BGM音量',
+                seVol: 'SE音量',
+                gameSettings: 'ゲーム設定',
+                textSize: '文字サイズ',
+                sizeSmall: '小',
+                sizeMedium: '中',
+                sizeLarge: '大',
+                saveTitle: 'セーブ',
+                loadTitle: 'ロード',
+                emptySlot: 'NO DATA',
+                back: '戻る'
+            }
+        },
+        en: {
+            title: {
+                langName: 'English',
+                options: 'Config',
+                newGame: 'Start Game',
+                continue: 'Load',
+                exit: 'Exit',
+                audioSettings: 'Audio Settings',
+                bgmVol: 'BGM Vol',
+                seVol: 'SE Vol',
+                gameSettings: 'Game Settings',
+                textSize: 'Text Size',
+                sizeSmall: 'S',
+                sizeMedium: 'M',
+                sizeLarge: 'L',
+                saveTitle: 'Save',
+                loadTitle: 'Load',
+                emptySlot: 'NO DATA',
+                back: 'Back'
+            }
+        },
+        zh: {
+            title: {
+                langName: '中文',
+                options: '设置',
+                newGame: '开始游戏',
+                continue: '继续游戏',
+                exit: '退出',
+                audioSettings: '音频设置',
+                bgmVol: 'BGM音量',
+                seVol: 'SE音量',
+                gameSettings: '游戏设置',
+                textSize: '文本大小',
+                sizeSmall: '小',
+                sizeMedium: '中',
+                sizeLarge: '大',
+                saveTitle: '保存',
+                loadTitle: '读取',
+                emptySlot: '空存档',
+                back: '返回'
+            }
+        }
+    };
 
     //=============================================================================
     // 1. グローバルCSS注入
@@ -110,7 +183,6 @@
             .anim-file-back-wrap, .anim-opt-back-wrap { position: absolute; bottom: 40px; right: 40px; z-index: 10000; will-change: transform, opacity; }
             .anim-file-slot-wrap, .anim-opt-section-wrap { will-change: transform, opacity; }
 
-            /* メインメニュー */
             .cp-menu-main { position: absolute; bottom: 10%; right: 40px; z-index: 10; display: flex; flex-direction: column; gap: 20px; align-items: flex-end; }
             .cp-btn-main { 
                 background: var(--cp-white); color: var(--cp-black); 
@@ -124,7 +196,6 @@
             .cp-btn-main.highlight { background: var(--cp-black); color: var(--cp-white); z-index: 2; box-shadow: -10px 10px 0 var(--cp-pink);}
             .cp-btn-main:hover { background: var(--cp-pink) !important; color: var(--cp-white) !important; transform: skewX(-15deg) translate(-20px, -5px) translateZ(0) !important; box-shadow: -15px 15px 0 var(--cp-black) !important; z-index: 3; }
             
-            /* サブメニュー */
             .cp-menu-sub { position: absolute; bottom: 10%; left: 40px; z-index: 10; display: flex; flex-direction: column; gap: 15px; align-items: flex-start;}
             .cp-btn-sub {
                 background: var(--cp-black); border: 5px solid var(--cp-black); color: var(--cp-white);
@@ -195,14 +266,7 @@
             .opt-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 35px; height: 45px; background: var(--cp-white); cursor: pointer; border: 4px solid var(--cp-black); box-shadow: 4px 4px 0 var(--cp-black); transition: 0.15s; }
             .opt-slider::-webkit-slider-thumb:hover { background: var(--cp-pink); transform: scale(1.1) translateZ(0); }
             .opt-val { font-size: 26px; color: var(--cp-black); width: 15%; text-align: right; font-weight: 900; white-space: nowrap; }
-            .opt-switch { position: relative; display: inline-block; width: 90px; height: 46px; } 
-            .opt-switch input { opacity: 0; width: 0; height: 0; }
-            .opt-slider-btn { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--cp-black); transition: .2s; border: 4px solid var(--cp-black); box-shadow: 4px 4px 0 var(--cp-grey);}
-            .opt-slider-btn:before { position: absolute; content: ""; height: 28px; width: 28px; left: 5px; bottom: 5px; background-color: var(--cp-white); transition: .2s; border: 3px solid var(--cp-black); }
-            input:checked + .opt-slider-btn { background-color: var(--cp-white); box-shadow: 4px 4px 0 var(--cp-pink); } 
-            input:checked + .opt-slider-btn:before { transform: translateX(40px) translateZ(0); background-color: var(--cp-black); }
-
-            /* 3行4列 12スロット完全固定グリッドレイアウト */
+            
             .save-grid-wrapper { 
                 position: absolute; top: 180px; left: 50%; transform: translateX(-50%) translateZ(0); 
                 width: 1500px; 
@@ -346,7 +410,11 @@
                                     <div class="opt-section">
                                         <div class="opt-section-inner">
                                             <div class="opt-section-title">{{ t('title.gameSettings') }}</div>
-                                            <div class="opt-row"><div class="opt-label">{{ t('title.alwaysDash') }}</div><label class="opt-switch"><input type="checkbox" v-model="config.alwaysDash" @change="playCursor"><span class="opt-slider-btn"></span></label></div>
+                                            <div class="opt-row">
+                                                <div class="opt-label">{{ t('title.textSize') }}</div>
+                                                <input type="range" class="opt-slider" min="1" max="3" step="1" v-model.number="config.dialogueTextSize" @change="playCursor">
+                                                <div class="opt-val">{{ textSizeLabel }}</div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -368,7 +436,7 @@
                                         <div class="save-slot" :class="{empty: !slot.info}" @click="onFileSlotClick(slot)">
                                             <div class="slot-id">DATA {{ slot.id < 10 ? '0'+slot.id : slot.id }}</div>
                                             <div class="slot-data" v-if="slot.info">
-                                                <div class="slot-time">⏳ {{ slot.info.playtime }}</div>
+                                                <div class="slot-time">TIME: {{ slot.info.playtime }}</div>
                                                 <div class="slot-date">{{ formatDate(slot.info.timestamp) }}</div>
                                             </div>
                                             <div class="slot-empty" v-else>{{ t('title.emptySlot') }}</div>
@@ -387,7 +455,7 @@
         `;
         document.body.appendChild(root);
 
-        const { createApp, reactive, computed, watch, onMounted, onUnmounted, ref } = window.Vue || Vue;
+        const { createApp, reactive, computed, watch, onMounted, onUnmounted } = window.Vue || Vue;
 
         const app = createApp({
             directives: {
@@ -414,61 +482,63 @@
                     canvasLeft: 0,
                     canvasTop: 0,
                     gameWidth: 1920,
-                    gameHeight: 1080
+                    gameHeight: 1080,
+                    currentLang: CM_Anime.savedLanguage || 'ja'
                 });
 
                 let isLock = false;
 
                 const config = reactive({
                     bgmVolume: ConfigManager.bgmVolume,
-                    bgsVolume: ConfigManager.bgsVolume,
-                    meVolume: ConfigManager.meVolume,
                     seVolume: ConfigManager.seVolume,
-                    alwaysDash: ConfigManager.alwaysDash,
-                    commandRemember: ConfigManager.commandRemember
+                    dialogueTextSize: ConfigManager.dialogueTextSize || 2
                 });
 
                 watch(config, (newVal) => {
                     ConfigManager.bgmVolume = newVal.bgmVolume;
-                    ConfigManager.bgsVolume = newVal.bgsVolume;
-                    ConfigManager.meVolume = newVal.meVolume;
                     ConfigManager.seVolume = newVal.seVolume;
-                    ConfigManager.alwaysDash = newVal.alwaysDash;
-                    ConfigManager.commandRemember = newVal.commandRemember;
+                    ConfigManager.dialogueTextSize = newVal.dialogueTextSize;
                     ConfigManager.save();
                 }, { deep: true });
 
                 const playCursor = () => SoundManager.playCursor();
 
                 const t = (path) => {
-                    if (Core && Core.I18n && Core.I18n.reactiveState) {
-                        const _trigger = Core.I18n.reactiveState.lang; 
-                        return Core.I18n.translate(path);
+                    const keys = path.split('.');
+                    let obj = CM_LocalDict[state.currentLang] || CM_LocalDict['ja'];
+                    for (const k of keys) {
+                        if (obj && obj[k]) {
+                            obj = obj[k];
+                        } else {
+                            return path;
+                        }
                     }
-                    return path;
+                    return obj;
                 };
 
+                // サイズの数値を言語ラベルにマッピング
+                const textSizeLabel = computed(() => {
+                    if (config.dialogueTextSize === 1) return t('title.sizeSmall');
+                    if (config.dialogueTextSize === 3) return t('title.sizeLarge');
+                    return t('title.sizeMedium');
+                });
+
                 const availLangs = computed(() => {
-                    if (Core && Core.I18n && Core.I18n.reactiveState) {
-                        const _trigger = Core.I18n.reactiveState.ready; 
-                    }
-                    return (Core && Core.I18n && Core.I18n.data) ? Core.I18n.data : {};
+                    return { ja: true, en: true, zh: true };
                 });
 
                 const getLangDisplayName = (key) => {
-                    if (Core && Core.I18n && Core.I18n.data && Core.I18n.data[key]) {
-                        const dict = Core.I18n.data[key];
-                        if (dict.title && dict.title.langName) return dict.title.langName;
-                    }
-                    // 韓国語(ko)のフォールバック設定を削除、日・英・中の3言語へ最適化
                     const fallbacks = { ja: '日本語', zh: '中文', en: 'English' };
                     return fallbacks[key] || key.toUpperCase();
                 };
 
                 const switchLang = (key) => {
                     SoundManager.playOk();
-                    Core.I18n.changeLanguage(key);
-                    ConfigManager.save();
+                    state.currentLang = key;
+                    if (Core && Core.I18n && typeof Core.I18n.changeLanguage === 'function') {
+                        Core.I18n.changeLanguage(key);
+                    }
+                    ConfigManager.save(); 
                     state.langMenuOpen = false;
                 };
                 
@@ -665,7 +735,7 @@
                 const onOptionsLeave = (el, done) => gsap.to(el, { scale: 0.95, opacity: 0, duration: 0.2, onComplete: done });
 
                 return { 
-                    state, isVisible, config, t, availLangs, switchLang, sandboxStyle, customBgStyle, getLangDisplayName,
+                    state, isVisible, config, t, textSizeLabel, availLangs, switchLang, sandboxStyle, customBgStyle, getLangDisplayName,
                     cmdNewGame, cmdLoadGame, cmdOptions, cmdExit, cmdBackToMenu, onFileSlotClick, refreshSavefiles, playCursor, formatDate,
                     onSplashEnter, onSplashLeave, onTitleEnter, onTitleLeave, onMenuEnter, onMenuLeave,
                     onFileEnter, onFileLeave, onOptionsEnter, onOptionsLeave
@@ -677,7 +747,25 @@
     };
 
     //=============================================================================
-    // 3. ライフサイクルインターセプト (Scene_Base, Window_Base 置換)
+    // 3. ConfigManagerの拡張 (状態の永続化)
+    //=============================================================================
+    const _ConfigManager_makeData = ConfigManager.makeData;
+    ConfigManager.makeData = function() {
+        const config = _ConfigManager_makeData.call(this);
+        config.cmLanguage = CM_Anime.VueApp ? CM_Anime.VueApp.state.currentLang : 'ja';
+        config.dialogueTextSize = CM_Anime.VueApp ? CM_Anime.VueApp.config.dialogueTextSize : 2;
+        return config;
+    };
+
+    const _ConfigManager_applyData = ConfigManager.applyData;
+    ConfigManager.applyData = function(config) {
+        _ConfigManager_applyData.call(this, config);
+        CM_Anime.savedLanguage = config.cmLanguage || 'ja';
+        this.dialogueTextSize = config.dialogueTextSize !== undefined ? config.dialogueTextSize : 2;
+    };
+
+    //=============================================================================
+    // 4. ライフサイクルインターセプト
     //=============================================================================
     const _DataManager_maxSavefiles = DataManager.maxSavefiles;
     DataManager.maxSavefiles = function() {
@@ -728,11 +816,8 @@
         Scene_MenuBase.prototype.start.call(this); 
         if (CM_Anime.VueApp) {
             CM_Anime.VueApp.config.bgmVolume = ConfigManager.bgmVolume;
-            CM_Anime.VueApp.config.bgsVolume = ConfigManager.bgsVolume;
-            CM_Anime.VueApp.config.meVolume = ConfigManager.meVolume;
             CM_Anime.VueApp.config.seVolume = ConfigManager.seVolume;
-            CM_Anime.VueApp.config.alwaysDash = ConfigManager.alwaysDash;
-            CM_Anime.VueApp.config.commandRemember = ConfigManager.commandRemember;
+            CM_Anime.VueApp.config.dialogueTextSize = ConfigManager.dialogueTextSize || 2;
             CM_Anime.VueApp.state.activeScene = 'options';
         }
     };
