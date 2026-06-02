@@ -100,3 +100,19 @@ GSAP 与 Transform 矩阵防塌陷原则 (Matrix Collapse Prevention):
 
 延迟重生机制 (Respawn Lifecycle): 
 确认视觉底层完全就绪后，才基于最新时间状态 (Phase/Day) 重绘节点并执行 GSAP 进场动画。彻底解决由于异步加载造成的“底图黑屏期节点幽灵穿透”问题。
+
+=============================================================================
+9. 架构演进日志 (Changelog: Hybrid Architecture - Time & Exploration)
+=============================================================================
+[Core Engine] Time & Survival System (CM_TimeSurvivalSystem):
+- 引入 SSOT (唯一事实来源) 星期推演逻辑。不再使用独立变量存储“星期”，通过 `sys.day` 动态模运算推演（1=周一 ~ 7=周日），从根源杜绝跨天数据不同步风险。内置星期多语言本地化字典纯净输出。
+
+[Exploration] Point-and-Click Map (CM_ExploreSystem):
+- 探索节点 (POI) 生命期管线升级，增加 `allowedDays` 过滤器数组（如 `[1, 5]` 代表仅周一和周五出现）。并在引擎轮询 Tick 中与现有昼夜条件无缝融合，实现精准动态渲染。
+
+[UI / UX] HUD & Transition (CM_Vue_SurvivalHUD):
+- 独立 Z-Index 突防：右上角新增绝对定位悬浮日历面板 (Days & Weekday)，严格遵守黑底白字高对比度赛璐璐规范。
+- GSAP 3D 矩阵动画：在 `sleep` 昼夜交替过渡动画中，集成 GSAP `rotationX` 的 3D 翻页动效。动画执行与底层数据结算解耦，通过回调在全屏遮蔽态静默刷新数据，配合 `back.out` 缓动函数实现零塌陷的顺滑翻页演出。
+
+[Editor] Omni-Editor Modules (module_map.js):
+- 数据生产端闭环：地图 POI 配置面板新增“星期出现条件”复选框组件。双向绑定并生成标准化的 `allowedDays` 数组导出，完善引擎-编辑器数据链路。
