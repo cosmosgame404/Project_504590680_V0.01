@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc [v8.5.4] サイバーポップ・タイトル＆UI (カード縮小＆24時間表示最適化版)
+ * @plugindesc [v8.5.5] サイバーポップ・タイトル＆UI (3言語対応最適化版)
  * @author Coding Assistant (Architecture Architect)
  * @base CM_CoreEngine
  * @orderAfter CM_CoreEngine
@@ -29,11 +29,10 @@
  *
  * @help
  * ============================================================================
- * アーキテクチャ更新 (v8.5.4):
- * 1. セーブデータカードの縮小化: 高さと余白を調整し、よりスタイリッシュな比率に変更。
- * 2. タイムスタンプのフォーマット最適化: ローカルの「午前/午後」を排除し、
- * 24時間表記 (YYYY/M/D HH:mm) のカスタムフォーマット関数 (formatDate) を実装。
- * 3. プレイ時間とセーブ日時のフォントサイズを +1px 拡大し視認性を向上。
+ * アーキテクチャ更新 (v8.5.5):
+ * 1. 言語サポートの最適化: 繁体字および韓国語のフォールバックを削除。
+ * 日・英・簡体字の3言語のみのサポートへ完全移行。
+ * 2. セーブデータカード縮小および24時間表示機能はv8.5.4を継承。
  * ============================================================================
  */
 
@@ -219,7 +218,6 @@
                 gap: 25px; 
             }
             
-            /* カードの縮小 (Height と Padding を削減) */
             .save-slot { 
                 background: var(--cp-white); border: 5px solid var(--cp-black); padding: 20px; 
                 cursor: pointer; box-shadow: 8px 8px 0 var(--cp-black); 
@@ -244,7 +242,6 @@
             
             .slot-data { display: flex; flex-direction: column; gap: 5px; text-align: left; transform: skewX(3deg);}
             
-            /* フォントサイズをそれぞれ +1 拡大 */
             .slot-time { font-size: 19px; font-weight: bold; color: var(--cp-black); transition: color 0.15s; }
             .slot-date { font-size: 17px; font-weight: bold; color: #666; transition: color 0.15s; }
             
@@ -463,7 +460,8 @@
                         const dict = Core.I18n.data[key];
                         if (dict.title && dict.title.langName) return dict.title.langName;
                     }
-                    const fallbacks = { ja: '日本語', zh: '中文', en: 'English', ko: '한국어' };
+                    // 韓国語(ko)のフォールバック設定を削除、日・英・中の3言語へ最適化
+                    const fallbacks = { ja: '日本語', zh: '中文', en: 'English' };
                     return fallbacks[key] || key.toUpperCase();
                 };
 
@@ -474,7 +472,6 @@
                     state.langMenuOpen = false;
                 };
                 
-                // 【新規】 24時間表記 (YYYY/M/D HH:mm) を返すフォーマット関数
                 const formatDate = (timestamp) => {
                     if (!timestamp) return '';
                     const d = new Date(timestamp);
@@ -583,7 +580,7 @@
                 };
 
                 const refreshSavefiles = () => {
-                    const max = 12; // UI上強制12スロット
+                    const max = 12; 
                     const arr = [];
                     for(let i=1; i<=max; i++) arr.push({ id: i, info: DataManager.savefileInfo(i) });
                     state.savefiles = arr;
