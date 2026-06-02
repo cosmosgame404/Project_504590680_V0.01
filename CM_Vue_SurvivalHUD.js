@@ -1,18 +1,21 @@
 /*:
  * @target MZ
- * @plugindesc [v8.4.0] サバイバルHUD & トランジション (独立サンドボックス自己マウント・曜日カレンダー実装版)
+ * @plugindesc [v8.5.0] サバイバルHUD & トランジション (統合型UI・座標左上固定・SSOT拡張版)
  * @author Cosmos404
  * @base CM_CoreEngine
  * @base CM_TimeSurvivalSystem
  * @orderAfter CM_TimeSurvivalSystem
- * * @help
+ *
+ * @help
  * ============================================================================
- * Survival HUD & Transition UI - Self Mounting Architecture
- * * 【アーキテクチャ仕様 (v8.4.0)】
- * 1. 独立ライフサイクル: Scene_Map 開始時に自律的に .cm-sandbox-root を構築。
- * 2. 座標系の固定化: プラグイン内部のCSSにて、画面上部中央と右上に完全固定。
- * 3. 3Dフリップカレンダー: GSAPによるトランジションに連動し、データ同期(SSOT)
- * とDOM更新のタイミングを厳密に制御したX軸回転アニメーションを実装。
+ * Survival HUD & Transition UI - Unified Architecture
+ * * 【アーキテクチャ仕様 (v8.5.0 統合更新)】
+ * 1. 統合座標系: 全てのHUD要素(日付、マップ名、所持金、AP)を左上(top/left)の
+ * 統合コンテナに集約し、Flexboxによる垂直レイアウトへ再構築。
+ * 2. ノイズレスUI原則: 全ノードの配色を黒背景(#1a1a1a)・白文字・白ボーダーの
+ * 高コントラストソリッドブロックへ統一。視覚的ノイズを徹底排除。
+ * 3. ネイティブデータ層との疎結合: マップ名(displayName)および所持金(gold)を
+ * SSOTの同期サイクル内で安全に取得し、ライフサイクルを汚染せずに描画。
  * ============================================================================
  */
 
@@ -20,7 +23,7 @@
     "use strict";
 
     //=============================================================================
-    // CSS Injection (トップセンター固定 & 右上カレンダー)
+    // CSS Injection (統合コンテナ・左上完全固定)
     //=============================================================================
     if (!document.getElementById('cm-survival-hud-styles')) {
         const style = document.createElement('style');
@@ -30,73 +33,23 @@
                 pointer-events: none;
             }
 
-            .cm-survival-hud-panel {
+            /* 左上統合コンテナ */
+            .cm-hud-unified-container {
                 position: absolute;
                 top: 24px;
-                left: 50%;
-                transform: translateX(-50%) translateZ(0);
+                left: 24px;
                 display: flex;
-                align-items: center;
-                gap: 16px;
-                font-family: var(--cm-font-main, sans-serif);
-                pointer-events: auto; 
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
                 z-index: 100;
-                will-change: transform;
-            }
-            
-            .cm-ap-display-block {
-                background-color: #ffffff;
-                color: #1a1a1a;
-                border: 3px solid #1a1a1a;
-                padding: 8px 16px;
-                font-weight: 800;
-                font-size: 20px;
-                letter-spacing: 1px;
-                box-shadow: 4px 4px 0px #1a1a1a; 
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .cm-hud-phase-icon {
-                font-size: 22px;
-                line-height: 1;
-            }
-
-            .cm-hud-btn-rest {
-                background-color: #FFD54F; 
-                color: #1a1a1a;
-                border: 3px solid #1a1a1a;
-                padding: 8px 24px;
-                font-weight: 800;
-                font-size: 18px;
-                cursor: pointer;
-                box-shadow: 4px 4px 0px #1a1a1a;
-                transition: transform 0.1s ease, box-shadow 0.1s ease;
-                outline: none;
-            }
-
-            .cm-hud-btn-rest:active {
-                transform: translate(4px, 4px);
-                box-shadow: 0px 0px 0px #1a1a1a;
-            }
-
-            .cm-hud-btn-rest.is-night-phase {
-                background-color: #9E9E9E; 
-            }
-
-            /* 右上カレンダー (3Dフリップ対応・トランジション暗幕貫通) */
-            .cm-survival-date-panel {
-                position: absolute;
-                top: 24px;
-                right: 32px;
-                z-index: 10000; 
                 pointer-events: none;
-                perspective: 1200px;
                 font-family: var(--cm-font-main, sans-serif);
+                perspective: 1200px;
             }
 
-            .cm-date-display-block {
+            /* 共通ソリッドブロック (ノイズレスUI原則適用) */
+            .cm-unified-block {
                 background-color: #1a1a1a;
                 color: #ffffff;
                 border: 3px solid #ffffff;
@@ -108,14 +61,49 @@
                 display: flex;
                 align-items: center;
                 gap: 12px;
+                pointer-events: auto;
+            }
+
+            /* 日付専用プロパティ (3Dフリップマトリクス維持) */
+            .cm-date-block {
                 transform-origin: center center;
                 transform-style: preserve-3d;
                 will-change: transform;
             }
 
-            .cm-date-separator {
+            /* テキスト区切り用セパレータ */
+            .cm-text-separator {
                 opacity: 0.6;
                 font-weight: normal;
+                margin: 0 4px;
+            }
+
+            .cm-hud-phase-icon {
+                font-size: 22px;
+                line-height: 1;
+            }
+
+            /* 休息ボタン (共通ブロック内包・黒底白枠) */
+            .cm-hud-btn-rest {
+                background-color: #1a1a1a; 
+                color: #ffffff;
+                border: 2px solid #ffffff;
+                margin-left: 12px;
+                padding: 4px 20px;
+                font-weight: 800;
+                font-size: 18px;
+                cursor: pointer;
+                transition: transform 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+                outline: none;
+            }
+
+            .cm-hud-btn-rest:active {
+                transform: translate(2px, 2px);
+            }
+
+            .cm-hud-btn-rest.is-night-phase {
+                color: #777777; 
+                border-color: #777777;
             }
 
             /* フルスクリーン暗幕・日月アニメーションレイヤー */
@@ -149,25 +137,29 @@
     const SurvivalHUDComponent = {
         template: `
             <div>
-                <div class="cm-survival-hud-panel" v-show="isVisible && !isAnimating">
-                    <div class="cm-ap-display-block">
+                <div class="cm-hud-unified-container" v-show="isVisible">
+                    
+                    <div class="cm-unified-block cm-date-block" ref="dateBlockRef">
+                        <span class="cm-date-day">{{ currentDay }} Days</span>
+                        <span class="cm-text-separator">|</span>
+                        <span class="cm-date-weekday">{{ currentWeekday }}</span>
+                    </div>
+
+                    <div class="cm-unified-block cm-info-block" v-show="!isAnimating">
+                        <span class="cm-info-map">{{ currentMapName }}</span>
+                        <span class="cm-text-separator">|</span>
+                        <span class="cm-info-gold">{{ currentGold }} G</span>
+                    </div>
+
+                    <div class="cm-unified-block cm-ap-block" v-show="!isAnimating">
                         <span class="cm-hud-phase-icon">{{ phaseIcon }}</span>
                         <span>AP: {{ currentAp }} / {{ maxAp }}</span>
-                    </div>
-                    
-                    <button 
-                        class="cm-hud-btn-rest" 
-                        :class="{ 'is-night-phase': phase === 1 }"
-                        @click="handleRestAction">
-                        休息
-                    </button>
-                </div>
-
-                <div class="cm-survival-date-panel" v-show="isVisible">
-                    <div class="cm-date-display-block" ref="dateBlockRef">
-                        <span class="cm-date-day">{{ currentDay }} Days</span>
-                        <span class="cm-date-separator">|</span>
-                        <span class="cm-date-weekday">{{ currentWeekday }}</span>
+                        <button 
+                            class="cm-hud-btn-rest" 
+                            :class="{ 'is-night-phase': phase === 1 }"
+                            @click="handleRestAction">
+                            休息
+                        </button>
                     </div>
                 </div>
 
@@ -180,25 +172,34 @@
         setup() {
             const { ref, computed, onMounted, onUnmounted } = window.Vue || Vue;
 
-            // DOMリファレンス
+            // DOM参照
             const overlayRef = ref(null);
             const sunRef = ref(null);
             const moonRef = ref(null);
             const dateBlockRef = ref(null);
 
-            // コアデータ同期ステート
+            // コアデータステート
             const currentAp = ref(3);
             const maxAp = ref(3);
             const phase = ref(0);
             const currentDay = ref(1);
             const currentWeekday = ref("");
+            
+            // 新規拡張ステート (ネイティブデータ層からの非侵襲的抽出)
+            const currentMapName = ref("");
+            const currentGold = ref(0);
+
+            // UI制御ステート
             const isVisible = ref(true);
             const isAnimating = ref(false);
 
             const phaseIcon = computed(() => phase.value === 0 ? "☀" : "🌙");
 
-            // SSOT 唯一の事実のソースからのリアルタイムサンプリング
+            /**
+             * SSOTおよびネイティブゲームインスタンスからのリアルタイム同期
+             */
             const syncData = () => {
+                // サバイバル基盤データの同期
                 const sys = $gameSystem && $gameSystem._cmSurvival;
                 if (sys) {
                     currentAp.value = sys.ap;
@@ -210,6 +211,14 @@
                 if (window.CM_TimeSurvival && typeof window.CM_TimeSurvival.getTotalDays === 'function') {
                     currentDay.value = window.CM_TimeSurvival.getTotalDays();
                     currentWeekday.value = window.CM_TimeSurvival.getWeekdayText(window.CM_TimeSurvival.getDayOfWeek());
+                }
+
+                // マップ名および所持金の同期 (ゲーム進行中のみ取得)
+                if ($gameMap) {
+                    currentMapName.value = $gameMap.displayName() || "???";
+                }
+                if ($gameParty) {
+                    currentGold.value = $gameParty.gold() || 0;
                 }
                 
                 // Scene_Map 以外でのHUD描画を安全にクランプ
@@ -235,7 +244,9 @@
                 }
             };
 
-            // GSAP タイムライン制御 (Matrix Collapse Prevention & 3D Flip)
+            /**
+             * GSAP タイムライン制御 (Matrix Collapse Prevention & 3D Flip)
+             */
             const playTransition = (detail) => {
                 if (!window.gsap) {
                     if (detail.onOpaque) detail.onOpaque();
@@ -245,21 +256,21 @@
                 isAnimating.value = true;
                 const tl = gsap.timeline();
 
-                // 0. 就寝時(夜->昼)はトランジション開始と同時にカレンダーのフリップアウトを開始
+                // 就寝時(夜->昼): トランジション開始と同時にカレンダーのフリップアウトを開始
                 if (detail.type === "sleep" && dateBlockRef.value) {
                     tl.to(dateBlockRef.value, { rotationX: -90, duration: 0.3, ease: "power1.in" }, 0);
                 }
 
-                // 1. ソリッドな暗幕のフェードイン
+                // 暗幕レイヤーのフェードイン
                 tl.to(overlayRef.value, { autoAlpha: 1, duration: 0.6, ease: "power2.out" }, 0);
 
-                // 2. 遮蔽完了タイミングでのデータ整合性コミット
+                // 遮蔽完了タイミングでのデータ整合性コミット
                 tl.call(() => {
                     if (detail.onOpaque) detail.onOpaque();
-                    syncData(); // フリップの裏側(不可視状態)で安全にVueのDOMデータを最新化
+                    syncData(); 
                 });
 
-                // 3. セルルック演出（Y軸の直線運動による降下/上昇とカレンダーフリップイン）
+                // シンボル演出 (セルルック運動)
                 if (detail.type === "rest") {
                     tl.fromTo(sunRef.value, 
                         { y: 0, autoAlpha: 1, scale: 1 }, 
@@ -289,7 +300,7 @@
 
                 tl.to({}, { duration: 0.4 }); 
 
-                // 4. 残像クリーンアップとフェードアウト
+                // クリーンアップとフェードアウト
                 tl.to([sunRef.value, moonRef.value], { autoAlpha: 0, duration: 0.2 });
                 tl.to(overlayRef.value, { 
                     autoAlpha: 0, 
@@ -308,7 +319,7 @@
             let syncInterval = null;
 
             onMounted(() => {
-                syncData(); // 初回即時同期
+                syncData();
                 syncInterval = setInterval(syncData, 100);
                 document.addEventListener("CM_TimeSurvival:RequestAnimation", onAnimationRequest);
             });
@@ -318,7 +329,12 @@
                 document.removeEventListener("CM_TimeSurvival:RequestAnimation", onAnimationRequest);
             });
 
-            return { overlayRef, sunRef, moonRef, dateBlockRef, currentAp, maxAp, phase, currentDay, currentWeekday, phaseIcon, isVisible, isAnimating, handleRestAction };
+            return { 
+                overlayRef, sunRef, moonRef, dateBlockRef, 
+                currentAp, maxAp, phase, currentDay, currentWeekday, 
+                currentMapName, currentGold,
+                phaseIcon, isVisible, isAnimating, handleRestAction 
+            };
         }
     };
 
