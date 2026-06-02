@@ -1,10 +1,11 @@
 /**
- * 🌍 全能编辑器 V10.9.1 - 地图探索引擎模块 (module_map.js)
+ * 全能编辑器 V10.9.1 - 地图探索引擎模块 (module_map.js)
  * 重构：彻底移除分钟级时间系统，全面适配 V7.0 昼夜 12 刻度 (Tick/AP) 架构。
  * 升级：场景背景、POI 出现条件、资源消耗面板全面切换为“昼夜枚举”与“刻度结算”。
  * 架构更新：POI 坐标系全面升级为【百分比相对坐标 (0%~100%)】，兼容任意物理分辨率。
  * 修复：适配 V3.5 角色管理器的数据结构 (state.db.characters.actors)
  * 视图：同步引擎 300% 节点放大 (180px / 150px) 视觉对齐。
+ * 扩展：新增 allowedDays 星期过滤器数组支持。
  */
 
 import { state, services } from './editor_main.js';
@@ -71,6 +72,11 @@ export const MapEditor = {
         watch(() => mapCurrentScene.value?.points, (points) => {
             if (!points || !state.dirHandle) return;
             points.forEach(async (p) => {
+                // 兼容旧数据：如果缺少 allowedDays 属性，初始化为空数组
+                if (!p.allowedDays) {
+                    p.allowedDays = [];
+                }
+                
                 if (p.charId && state.db.characters?.actors) {
                     const c = state.db.characters.actors.find(x => x.id == p.charId);
                     if (c && c.defaultPortrait && !avatarBlobs[c.defaultPortrait]) {
@@ -131,7 +137,7 @@ export const MapEditor = {
                 id: "poi_" + Date.now().toString().slice(-4),
                 name: "新交互点", x: x, y: y, zIndex: 10, icon: "search", refreshMode: "always",
                 cooldownTime: 12, costTime: 0, costEnergy: 0, costSatiety: 0,
-                condition: "", timeCond: "", charId: "", showTooltip: false,
+                condition: "", timeCond: "", allowedDays: [], charId: "", showTooltip: false,
                 actions: [{ condition: "", actionType: "dialogue", arg1: "", arg2: "" }]
             });
             local.curPointIdx = mapCurrentScene.value.points.length - 1;
@@ -188,7 +194,6 @@ export const MapEditor = {
             
             if (isNpcMode(p)) {
                 const c = getNpcChar(p);
-                // 【视图放大更新】统一调整为 180x180
                 if (c && c.defaultPortrait) {
                     const imgUrl = avatarBlobs[c.defaultPortrait] || `../img/pictures/${c.defaultPortrait}.png`;
                     style.background = `url(${imgUrl}) center top / 100% auto no-repeat`;
@@ -455,6 +460,18 @@ export const MapEditor = {
                                  <option value="Day">☀️ 仅在昼间 (Day) 出现</option>
                                  <option value="Night">🌙 仅在夜间 (Night) 出现</option>
                              </select>
+                         </div>
+
+                         <div class="flex-column m-b-10 card p-10" style="border-color: var(--secondary);">
+                             <label class="text-secondary" style="font-size: 12px; font-weight: bold; margin-bottom: 8px;">📅 星期出现条件 (Allowed Days)</label>
+                             <div class="flex-row" style="flex-wrap: wrap; gap: 8px;">
+                                 <label v-for="(dayName, idx) in ['一','二','三','四','五','六','日']" :key="idx"
+                                        style="font-size: 12px; display: flex; align-items: center; gap: 4px; color: var(--text-main); cursor: pointer;">
+                                     <input type="checkbox" :value="idx + 1" v-model="mapCurrentPoint.allowedDays">
+                                     周{{ dayName }}
+                                 </label>
+                             </div>
+                             <div class="text-muted" style="font-size: 10px; margin-top: 8px;">* 不勾选任何项则代表【全周无限制均可出现】</div>
                          </div>
 
                          <div class="flex-column m-b-10">
